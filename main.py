@@ -218,12 +218,9 @@ def enterInDatabase(database, type):
         global db
         global current_database
         if(type != 'checked'):
-            dbs = client.list_database_names()
-            lowercase_db = [item.lower() for item in dbs]
-            if database in lowercase_db:
-                lowercase_index = lowercase_db.index(database)
-                db = client.get_database(dbs[lowercase_index])
-                current_database = dbs[lowercase_index]
+            db_exists = check_db_exists(database.lower())
+            if db_exists['exists']:
+                current_database = db_exists['name']
                 updateURI(current_database)
                 is_exists = linked_stages.do_stage_exists(current_database)
                 if(is_exists == False):
@@ -660,7 +657,7 @@ def check_db_exists(name):
     dbs = client.list_database_names()
     lowercase_db = [item.strip().lower() for item in dbs]
     if name.lower() in lowercase_db:
-        lower_index = lowercase_db.index(name)
+        lower_index = lowercase_db.index(name.lower())
         db_name = dbs[lower_index]
         return {'exists': True, 'name': db_name}
     else:
@@ -1949,6 +1946,7 @@ def go_next():
             database_name = next.stage
             enterInDatabase(database_name, 'not checked')
             linked_stages.move_stage_forward()
+            print('moved forward')
         elif(next.stage_type == 'collection'):
             collection_path_full = next.path
             collection_path_splitted = collection_path_full.split('/')
@@ -2218,6 +2216,7 @@ def main():
         recent_port = get_recent_port()
 
         while True:
+            linked_stages.print_stages()
             if recent_port is not None:
                 connect(recent_port)
                 command = input(BLUE + f'\n{currentURI} ' + RESET)
