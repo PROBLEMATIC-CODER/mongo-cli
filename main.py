@@ -19,8 +19,15 @@ import datetime
 from pymongo.operations import UpdateOne, InsertOne
 import ast
 import yaml
-from linked_stages import LinkedStages
 from mongodb_service_handler import start_mongodb_service
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+
+sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'stages'))
+
+from lib.stages.linked_stages import LinkedStages
 
 print(BLUE+'\n\n----------------------------------------------- Welcome To MongoDB Command Line Control System -----------------------------------------'+RESET + '\n\n')
 
@@ -201,7 +208,7 @@ def updateURI(update):
 
 
 def create_stage(stage_name, stage_type, path=None, stage_filter=None, selection_type=None):
-    linked_stages.add_stage(stage_name, stage_type,
+    linked_stages.add_stage(linked_stages,stage_name, stage_type,
                             filter=stage_filter, path=path, selection_type=selection_type)
     return True
 
@@ -224,11 +231,11 @@ def enterInDatabase(database, type):
                 current_database = db_exists['name']
                 updateURI(current_database)
                 db = client[current_database]
-                is_exists = linked_stages.do_stage_exists(current_database)
+                is_exists = linked_stages.do_stage_exists(current_database,linked_stages)
                 if(is_exists == False):
                     create_stage(current_database.strip(), 'database')
                 else:
-                    linked_stages.move_to_existing_stage(current_database)
+                    linked_stages.move_to_existing_stage(current_database,linked_stages)
                 return True
             else:
                 return False
@@ -282,12 +289,12 @@ def enterInCollection(collection_name, type):
             if(collection_name in available_collections):
                 collection = db[collection_name]
                 current_collection = collection_name
-                is_already = linked_stages.do_stage_exists(current_collection)
+                is_already = linked_stages.do_stage_exists(current_collection   ,linked_stages)
                 if(is_already == False):
                     create_stage(collection_name.strip(), 'collection',
                                  f'{current_database}/{current_collection}')
                 else:
-                    linked_stages.move_to_existing_stage(current_collection)
+                    linked_stages.move_to_existing_stage(current_collection ,linked_stages)
                 updateURI(f'{current_database}/{current_collection}')
                 print(
                     GREEN + f'\nSuccessfully accessed {current_collection} collection of {current_database} database'+RESET)
@@ -696,13 +703,13 @@ def get_direct_access(db_name, collection_name, show_logs=True):
             print(
                 GREEN + f' \nSuccefully accessed {collection_name} of {db_name}' + RESET) if show_logs is True else None
             do_stage_exists = linked_stages.do_stage_exists(
-                current_collection.strip())
+                current_collection.strip(),linked_stages)
             if(do_stage_exists == False):
                 create_stage(collection_name.strip(), 'collection',
                              f'{current_database}/{current_collection}')
             else:
                 linked_stages.move_to_existing_stage(
-                    current_collection) if show_logs is True else None
+                    current_collection,linked_stages) if show_logs is True else None
             return True
         else:
             print(
@@ -814,12 +821,12 @@ def select_document(command, show_logs=True, recursive=False):
             selected_documents_filter = f'{command}'
 
             filter_to_check = f'selected documents with {command}'
-            check_exists = linked_stages.do_stage_exists(filter_to_check)
+            check_exists = linked_stages.do_stage_exists(filter_to_check,linked_stages)
             if(check_exists == False):
                 create_stage(filter_to_check, 'document',
                              f'{current_database}/{current_collection}', command.strip(), 'filtered document')
             else:
-                linked_stages.move_to_existing_stage(filter_to_check)
+                linked_stages.move_to_existing_stage(filter_to_check,linked_stages)
             return True
         else:
             print(
@@ -1392,13 +1399,13 @@ def search_text(command):
                             GREEN + f'\nSuccessfully selected documents with {text_to_search} in {search_in_field} field' + RESET)
                     search_selection_filter = f'selected documents with {command}'
                     check_exists = linked_stages.do_stage_exists(
-                        search_selection_filter)
+                        search_selection_filter,linked_stages)
                     if(check_exists == False):
                         create_stage(search_selection_filter, 'document',
                                      f'{current_database}/{current_collection}', command, 'searched document')
                     else:
                         linked_stages.move_to_existing_stage(
-                            search_selection_filter)
+                            search_selection_filter,linked_stages)
                     return True
                 else:
                     return True
@@ -1602,13 +1609,13 @@ def select_all(show_logs=True):
             print(
                 GREEN + f"\nSuccessfully selected all documents from {current_collection} collection"+RESET) if show_logs == True else None
             check_exists = linked_stages.do_select_all_exists(
-                f"{current_database}/{current_collection}")
+                f"{current_database}/{current_collection}",linked_stages)
             if(check_exists == False):
                 create_stage('selected all', 'document',
                              f'{current_database}/{current_collection}', 'select all', 'select all')
             else:
                 linked_stages.move_select_all(
-                    f"{current_database}/{current_collection}")
+                    f"{current_database}/{current_collection}",linked_stages)
             return True
         except Exception as e:
             print(
@@ -1889,12 +1896,12 @@ def go_back():
         print(YELLOW + '\nAlready on the edge, nothing to move back on !' + RESET)
     else:
         if(previous_stage.stage_type == 'home'):
-            linked_stages.move_stage_back()
+            linked_stages.move_stage_back(linked_stages)
             navigate_home('do not show')
         elif(previous_stage.stage_type == 'database'):
             database_name = previous_stage.stage
             enterInDatabase(database_name, 'checked')
-            linked_stages.move_stage_back()
+            linked_stages.move_stage_back(linked_stages)
         elif(previous_stage.stage_type == 'collection'):
             collection_name = previous_stage.stage
             collection = previous_stage
@@ -1902,15 +1909,15 @@ def go_back():
             path_arr = path.split('/')
             path_arr = [p.strip() for p in path_arr]
             get_direct_access(path_arr[0], path_arr[1], False)
-            linked_stages.move_stage_back()
+            linked_stages.move_stage_back(linked_stages)
 
         elif(previous_stage.stage_type == 'document'):
             if(previous_stage.selection_type == 'filtered document'):
-                linked_stages.move_stage_back()
+                linked_stages.move_stage_back(linked_stages)
                 select_document(
                     f'select {linked_stages.current_stage.filter}', False, False)
             elif(previous_stage.selection_type == 'searched document'):
-                linked_stages.move_stage_back()
+                linked_stages.move_stage_back(linked_stages)
                 path = linked_stages.current_stage.path.split('/')
                 path = [p.strip() for p in path]
                 db_name, collection_name = path[0], path[1]
@@ -1922,7 +1929,7 @@ def go_back():
                     f'search {linked_stages.current_stage.filter.strip()}')
 
             elif(previous_stage.selection_type == 'select all'):
-                linked_stages.move_stage_back()
+                linked_stages.move_stage_back(linked_stages)
                 path = linked_stages.current_stage.path.split('/')
                 path = [p.strip() for p in path]
                 enterInDatabase(path[0].lower()) if path[0].lower(
@@ -1947,7 +1954,7 @@ def go_next():
         if next.stage_type == 'database':
             database_name = next.stage
             enterInDatabase(database_name, 'not checked')
-            linked_stages.move_stage_forward()
+            linked_stages.move_stage_forward(linked_stages)
             print('moved forward')
         elif(next.stage_type == 'collection'):
             collection_path_full = next.path
@@ -1957,15 +1964,15 @@ def go_next():
             db_name = collection_path_splitted[0]
             collection_name = collection_path_splitted[1]
             get_direct_access(db_name, collection_name, False)
-            linked_stages.move_stage_forward()
+            linked_stages.move_stage_forward(linked_stages)
 
         elif(next.stage_type == 'document'):
             if(next.selection_type == 'filtered document'):
-                linked_stages.move_stage_forward()
+                linked_stages.move_stage_forward(linked_stages)
                 select_document(
                     f'select {linked_stages.current_stage.filter}', False, False)
             elif(next.selection_type == 'searched document'):
-                linked_stages.move_stage_forward()
+                linked_stages.move_stage_forward(linked_stages)
                 path = linked_stages.current_stage.path.split('/')
                 path = [p.strip() for p in path]
                 db_name, collection_name = path[0], path[1]
@@ -1977,7 +1984,7 @@ def go_next():
                     f'search {linked_stages.current_stage.filter.strip()}')
 
             elif(next.selection_type == 'select all'):
-                linked_stages.move_stage_forward()
+                linked_stages.move_stage_forward(linked_stages)
                 path = linked_stages.current_stage.path.split('/')
                 path = [p.strip() for p in path]
                 enterInDatabase(path[0].lower()) if path[0].lower(
@@ -2218,7 +2225,7 @@ def main():
         recent_port = get_recent_port()
 
         while True:
-            linked_stages.print_stages()
+            linked_stages.print_stages(linked_stages)
             if recent_port is not None:
                 connect(recent_port)
                 command = input(BLUE + f'\n{currentURI} ' + RESET)
