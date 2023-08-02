@@ -186,6 +186,7 @@ def chooseDB():
     selected_database = answers['database']
     current_database = selected_database
     updateURI(BLUE + current_database)
+
     access_db = enterInDatabase(current_database, 'checked')
     if access_db:
         print(
@@ -222,6 +223,7 @@ def enterInDatabase(database, type):
             if db_exists['exists']:
                 current_database = db_exists['name']
                 updateURI(current_database)
+                db = client[current_database]
                 is_exists = linked_stages.do_stage_exists(current_database)
                 if(is_exists == False):
                     create_stage(current_database.strip(), 'database')
