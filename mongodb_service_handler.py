@@ -86,7 +86,7 @@ def stop_mongodb_service():
 
             admin_thread_done = True
             waiting_thread.join()
-            print(GREEN + "\nSuccessfully stopped the MongoDB service, run 'start mongo' command to start MongoDB service" +
+            print(GREEN + "\n\nSuccessfully stopped the MongoDB service, run 'start mongo' command to start MongoDB service" +
                   RESET)
             return {'type': 'success', 'status': True}
     except Exception as e:
@@ -121,7 +121,7 @@ def restart_mongodb_service():
         admin_thread_done = True
         waiting_thread.join()
 
-        print(GREEN + "\nSuccessfully restarted the MongoDB service"+RESET)
+        print(GREEN + "\n\nSuccessfully restarted the MongoDB service"+RESET)
         return {'type': 'success', 'status': True}
 
     except Exception as e:

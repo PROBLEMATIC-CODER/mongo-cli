@@ -1,7 +1,10 @@
 import yaml
 import socket
-
-
+import sys
+import os
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, 'port_handler'))
+from create_config import create_config_yaml
 def check_mongo_running(port):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -30,5 +33,6 @@ def check_mongo_status():
         else:
             return False
 
-    except:
-        return False
+    except Exception as e:
+        create_config_yaml()
+        return True

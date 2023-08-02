@@ -4,12 +4,11 @@ import os
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 from utils.text_colors import RED,RESET,GREEN,YELLOW
-from main import main
 from mongo_port_checker import *
 from create_config import create_config_yaml
 
 
-def update_port(command,main:function):
+def update_port(command,main):
     try:
         command = command.replace('change port', '').strip()
         key = 'recent_port'
@@ -66,11 +65,11 @@ def save_port(port):
         return False
 
 
-def remove_port(main:function):
+def remove_port(main):
     try:
         key = 'recent_port'
         with open('config.yaml', 'r') as f:
-            data = yaml.load(f)
+            data = yaml.load(f,Loader=yaml.FullLoader)
             if(data is None):
                 print(YELLOW+"\nRecent port not found"+RESET)
                 return True

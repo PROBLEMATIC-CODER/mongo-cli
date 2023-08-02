@@ -1,24 +1,12 @@
-from json import JSONEncoder
 import re
-from pymongo import MongoClient
 import pymongo
-from lib.utils import status
 import sys
 import os
-import keyboard
 from lib.utils.controller import restart_controller_child
-import json
-import socket
 from lib.utils.text_colors import RESET, RED, BLUE, GREEN, GRAY, YELLOW, BOLD, PURPLE
 import inquirer
-from watchdog.events import FileSystemEventHandler
-from lib.utils.get_errors import get_recent_errors
-from colorama import Fore, Style
 from bson import ObjectId
-import datetime
 from pymongo.operations import UpdateOne, InsertOne
-import ast
-import yaml
 from mongodb_service_handler import start_mongodb_service
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,11 +15,18 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'stages'))
 sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'operation_helpers'))
+sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'port_handler'))
+sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'get_mongo_data'))
 
 from lib.stages.linked_stages import LinkedStages
 from lib.operation_helpers.formatter import *
-from lib.operation_helpers.string_converter import *
 from lib.operation_helpers.value_processor import *
+from lib.operation_helpers.string_converter import *
+from lib.port_handler.port_operations import *
+from lib.port_handler.mongo_port_checker import *
+from lib.get_mongo_data.get_errors import get_recent_logs
+from lib.get_mongo_data.get_info import get_info
+
 
 print(BLUE+'\n\n----------------------------------------------- Welcome To MongoDB Command Line Control System -----------------------------------------'+RESET + '\n\n')
 
@@ -57,30 +52,6 @@ def restart_executer():
     restart_controller_child(path)
 
 
-class MongoEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, ObjectId):
-            return str(obj)
-        elif isinstance(obj, datetime):
-            return obj.isoformat()
-        else:
-            return super().default(obj)
-
-
-class FileChangeHandler(FileSystemEventHandler):
-    def __init__(self, callback):
-        self.callback = callback
-
-    def on_modified(self, event):
-        if not event.is_directory and event.src_path == current_file_path:
-            self.callback()
-
-
-def check_save():
-    current_modified = os.path.getmtime(current_file_path)
-    if current_modified > last_modified:
-        return True
-    return False
 
 
 def showStatus():
@@ -106,30 +77,23 @@ def showDB():
         print(YELLOW + "\nNo Database available, use 'create database' command to create one"+RESET)
         return True
 
-
-def handle_keypress(event, data):
-    key = event.name
-    if key == "enter":
-        return True
-
-    return False
-
-
 def chooseDB():
     global current_database
     databases = client.list_database_names()
-    choices = [f"{Fore.YELLOW}{db}{Style.RESET_ALL}" if db ==
+    choices = [f"{YELLOW + db + RESET}" if db ==
                current_database else db for db in databases]
+    choices.append('Exit Selection')
     question = [
         inquirer.List(
             'database',
             message='Choose a database',
             choices=choices,
-            ignore=True if keyboard.is_pressed('shift') else False
         )
     ]
     answers = inquirer.prompt(question)
     selected_database = answers['database']
+    if selected_database.lower() == 'exit selection': 
+        return None
     current_database = selected_database
     updateURI(BLUE + current_database)
 
@@ -137,6 +101,7 @@ def chooseDB():
     if access_db:
         print(
             GREEN + f'Successfully accessed {current_database} database' + RESET)
+        return True
     else:
         print(RED + f"Unable to choose {current_database} database" + RESET)
 
@@ -187,9 +152,6 @@ def enterInDatabase(database, type):
     except Exception as e:
         return False
 
-
-def show_errors():
-    get_recent_errors(15)
 
 
 def show_collections():
@@ -248,6 +210,7 @@ def choose_collection():
     global current_collection
     if(db != None):
         collections = db.list_collection_names()
+        collections.append('Exit Selection')
         question = [
             inquirer.List(
                 'collection',
@@ -257,6 +220,8 @@ def choose_collection():
         ]
         answers = inquirer.prompt(question)
         selected_collection = answers['collection']
+        if(selected_collection.lower() == 'exit selection'): 
+            return None
         current_collection = selected_collection
         enterInCollection(
             current_collection, 'not checked')
@@ -266,42 +231,6 @@ def choose_collection():
         print(RED+f"\nNo Databases are choosen has choosen yet, choose a database to see collections or see directly"+RESET)
         return False
 
-
-def get_info():
-    admin = client.admin
-    server_info = admin.command('serverStatus')
-    storage_engine = server_info['storageEngine']['name']
-    network_activity = {
-        'bytes_in': server_info['network']['bytesIn'],
-        'bytes_out': server_info['network']['bytesOut']
-    }
-
-    num_connections = server_info['connections']['current']
-    active_connections = server_info['connections']['active']
-
-    memory_usage = {
-        'resident_memory': server_info['mem']['resident'],
-        'virtual_memory': server_info['mem']['virtual']
-    }
-    host, version, pid, connections, uptime = server_info['host'], server_info[
-        'version'], server_info['pid'], server_info['connections'], server_info['uptime']
-
-    print(GREEN + "\nMongoDB informations -\n" + RESET)
-
-    structure = f"Host: {host}\nVersion: {version}\nProcessID: {pid}\nUptime:{uptime}\nStorage Engine: {storage_engine}\nConnections Counts:{num_connections}\nActive Connections:{active_connections}\nNetwork Activities:{network_activity}\nMemory usage:{memory_usage}\n"
-
-    print(structure)
-
-    return server_info
-
-
-class CustomJSONEncoder(JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, ObjectId):
-            return str(obj)
-        if isinstance(obj, datetime.datetime):
-            return obj.strftime('%Y-%m-%d %H:%M:%S')
-        return super().default(obj)
 
 
 def get_collection_data():
@@ -342,8 +271,6 @@ def delete_documents():
 
     else:
         print(RED+"Invalid process to delete document"+RESET)
-
-
 
 
 def conditional_delete(command):
@@ -492,7 +419,6 @@ def insert_one(data):
             return False
     else:
         print(RED+"ERROR: Process of insertion is invalid")
-
 
 
 def insert_many(command):
@@ -753,6 +679,7 @@ def show_selected():
     else:
         print(YELLOW + "\nNothing has been selected yet" + RESET)
         return False
+
 
 
 def edit_selected_documents(command, reselect=True):
@@ -1318,136 +1245,110 @@ def create_config_yaml():
         return False
 
 
-def update_port(command):
-    try:
-        command = command.replace('change port', '').strip()
-        key = 'recent_port'
-        if command.isdigit():
-            running = check_mongo_running(int(command))
-            if(running == True):
-                try:
-                    with open('config.yaml', 'r') as f:
-                        data = yaml.safe_load(f)
-                        if(data[key] == command):
-                            print(GREEN + "\nPort has been updated"+RESET)
-                            return True
-                    data[key] = command
-                    with open('config.yaml', 'w') as f:
-                        yaml.dump(data, f)
-                    print(
-                        GREEN + "\nPort has been updated successfully, restarting the process...."+RESET)
-                    main()
-                    return True
-                except FileNotFoundError:
-                    create_config_yaml()
-                    update_port(f'change port {command}')
-            else:
-                print(RED + "\nFailed to connect and update with the given port."+RESET)
-                return False
-
-        else:
-            print(RED + "\nInvalid port name" + RESET)
-        return False
-    except Exception as e:
-        print(RED + "\nFailed to connect and update with the given port"+RESET)
-        return False
-
 
 def parseCommand(command):
-    # try:
-    if(len(command) > 0):
-        parts = command.lower().strip().split()
-        if len(parts) >= 1 and parts[0] == 'run':
-            database_name = parts[1]
-            if database_name:
-                db_access = enterInDatabase(database_name, 'to check')
-                if(db_access == True):
-                    print(
-                        GREEN + f'\nSuccessfully accessed {database_name}' + RESET)
+    try:
+        if(len(command) > 0):
+            parts = command.lower().strip().split()
+            if len(parts) >= 1 and parts[0] == 'run':
+                database_name = parts[1]
+                if database_name:
+                    db_access = enterInDatabase(database_name, 'to check')
+                    if(db_access == True):
+                        print(
+                            GREEN + f'\nSuccessfully accessed {database_name}' + RESET)
+                    else:
+                        print(
+                            RED + f'\nUnable to accessed {database_name} database' + RESET)
+            elif command in commands:
+                commands[command]()
+            elif len(parts) >= 2 and (parts[0] == 'new' or parts[0] == 'create') and parts[1] == 'collection':
+                collection_name = parts[2]
+                if(collection_name):
+                    create_collection(collection_name)
+            elif (len(parts) >= 2 and (parts[0] == 'new' or parts[0] == 'create') and parts[1] == 'db'):
+                database_name = parts[2]
+                if(database_name):
+                    create_database(database_name)
                 else:
-                    print(
-                        RED + f'\nUnable to accessed {database_name} database' + RESET)
-        elif command in commands:
-            commands[command]()
-        elif len(parts) >= 2 and (parts[0] == 'new' or parts[0] == 'create') and parts[1] == 'collection':
-            collection_name = parts[2]
-            if(collection_name):
-                create_collection(collection_name)
-        elif (len(parts) >= 2 and (parts[0] == 'new' or parts[0] == 'create') and parts[1] == 'db'):
-            database_name = parts[2]
-            if(database_name):
-                create_database(database_name)
-            else:
-                commandNotFound(command)
-        elif (len(parts) >= 4 and (parts[0] == 'delete' and parts[1] == 'with')):
-            conditional_delete(command)
-        elif len(parts) == 2 and (parts[0] == 'drop' or parts[0] == 'delete'):
-            command_part = command.split(' ')
-            name = command_part[1].strip()
-            drop(name)
-        elif len(parts) >= 3 and (parts[0].lower() == 'use' or parts[0].lower() == 'run') and parts[2] == 'of':
-            collection_name = parts[1]
-            db_name = parts[3]
-            get_direct_access(db_name, collection_name)
-        elif db is not None and len(parts) == 2 and parts[0] == 'use':
-            parts = command.split(' ')
-            collection_name = parts[1].strip()
-            enterInCollection(collection_name, 'not checked')
+                    commandNotFound(command)
+            elif (len(parts) >= 4 and (parts[0] == 'delete' and parts[1] == 'with')):
+                conditional_delete(command)
+            elif len(parts) == 2 and (parts[0] == 'drop' or parts[0] == 'delete'):
+                command_part = command.split(' ')
+                name = command_part[1].strip()
+                drop(name)
+            elif len(parts) >= 3 and (parts[0].lower() == 'use' or parts[0].lower() == 'run') and parts[2] == 'of':
+                collection_name = parts[1]
+                db_name = parts[3]
+                get_direct_access(db_name, collection_name)
+            elif db is not None and len(parts) == 2 and parts[0] == 'use':
+                parts = command.split(' ')
+                collection_name = parts[1].strip()
+                enterInCollection(collection_name, 'not checked')
 
-        elif len(parts) >= 3 and parts[0] == 'sort' and parts[1] == 'using':
-            sort_collection(command)
+            elif len(parts) >= 3 and parts[0] == 'sort' and parts[1] == 'using':
+                sort_collection(command)
 
-        elif (len(parts) >= 3 and parts[0] == 'insert'):
-            insertion_type_array = command.split(' and ')
-            if len(insertion_type_array) <= 1:
-                proccessed_data = process_insertion_data(command)
-                if(proccessed_data != False):
-                    insert_one(proccessed_data)
+            elif (len(parts) >= 3 and parts[0] == 'insert'):
+                insertion_type_array = command.split(' and ')
+                if len(insertion_type_array) <= 1:
+                    proccessed_data = process_insertion_data(command)
+                    if(proccessed_data != False):
+                        insert_one(proccessed_data)
+                    else:
+                        print(RED + "\nData processing error"+RESET)
                 else:
-                    print(RED + "\nData processing error"+RESET)
+                    insert_many(command)
+            elif len(parts) >= 5 and (parts[0] == 'insert' and parts[1] == 'one' and parts[2] == 'in'):
+                collection_name = parts[3]
+                data = parts[4]
+                processed_data = process_direct_insertion_data(data)
+                insert_one_direct(processed_data, collection_name)
+            elif (len(parts) >= 3 and parts[0] == 'value' and parts[1] == 'of'):
+                get_selected_value(command)
+            elif (len(parts) >= 2 and parts[0] == 'count'):
+                count(command)
+            elif(len(parts) >= 4 and parts[0] == 'append'):
+                append_in_arr_field(command)
+            elif len(parts) >= 4 and parts[0] == 'pop' and parts[2] == 'from':
+                pop_from_arr_field(command)
+            elif len(parts) >= 5 and parts[0] == 'pop' and parts[1] == 'index' and parts[3] == 'from':
+                pop_from_arr_field(command)
+            elif len(parts) >= 1 and parts[0] == 'filter':
+                filter_document(command, 'filter')
+            elif (len(parts) >= 4) and parts[0] == 'search':
+                search_text(command)
+            elif len(parts) >= 4 and parts[0] == 'add':
+                add_fields(command)
+            elif(len(parts) >= 2 and parts[0] == 'remove'):
+                remove_field(command)
+            elif len(parts) >= 4 and parts[0] == 'edit':
+                edit_selected_documents(command)
+            elif len(parts) >= 4 and parts[0] == 'select':
+                select_document(command)
+            elif len(parts) >= 4 and parts[0] == 'rename':
+                rename_field(command)
+            elif len(parts) == 3 and parts[0] == 'change' and parts[1] == 'port':
+                update_port(command,main)
+            elif len(parts) == 2 and parts[0] == 'logs':
+                log_arr = [log.strip() for log in command.split(' ')]
+                log_count = log_arr[1]
+                if(log_count is not None and log_count.isdigit()):
+                    get_recent_logs(int(log_count))
+                    return True
+                print(RED + "\nInvalid command for getting recent logs"+RESET)
+                return False
             else:
-                insert_many(command)
-        elif len(parts) >= 5 and (parts[0] == 'insert' and parts[1] == 'one' and parts[2] == 'in'):
-            collection_name = parts[3]
-            data = parts[4]
-            processed_data = process_direct_insertion_data(data)
-            insert_one_direct(processed_data, collection_name)
-        elif (len(parts) >= 3 and parts[0] == 'value' and parts[1] == 'of'):
-            get_selected_value(command)
-        elif (len(parts) >= 2 and parts[0] == 'count'):
-            count(command)
-        elif(len(parts) >= 4 and parts[0] == 'append'):
-            append_in_arr_field(command)
-        elif len(parts) >= 4 and parts[0] == 'pop' and parts[2] == 'from':
-            pop_from_arr_field(command)
-        elif len(parts) >= 5 and parts[0] == 'pop' and parts[1] == 'index' and parts[3] == 'from':
-            pop_from_arr_field(command)
-        elif len(parts) >= 1 and parts[0] == 'filter':
-            filter_document(command, 'filter')
-        elif (len(parts) >= 4) and parts[0] == 'search':
-            search_text(command)
-        elif len(parts) >= 4 and parts[0] == 'add':
-            add_fields(command)
-        elif(len(parts) >= 2 and parts[0] == 'remove'):
-            remove_field(command)
-        elif len(parts) >= 4 and parts[0] == 'edit':
-            edit_selected_documents(command)
-        elif len(parts) >= 4 and parts[0] == 'select':
-            select_document(command)
-        elif len(parts) >= 4 and parts[0] == 'rename':
-            rename_field(command)
-        elif len(parts) == 3 and parts[0] == 'change' and parts[1] == 'port':
-            update_port(command)
+                print(
+                    RED+f"\nGiven '{command}' is invalid, please try valid one. To see all commands type commands and press enter"+RESET)
         else:
             print(
-                RED+f"\nGiven '{command}' is invalid, please try valid one. To see all commands type commands and press enter"+RESET)
-    else:
-        print(
-            RED + "\nCommand is invalid, please try valid one. To see all commands type commands and press enter.")
+                RED + "\nCommand is invalid, please try valid one. To see all commands type commands and press enter.")
+            return False
+    except Exception as e:
+        print(RED + "\nUnable to process command, please try again !"+RESET)
         return False
-    # except Exception as e:
-    #     print(RED + "\nUnable to process command, please try again !"+RESET)
-    #     return False
 
 
 def select_all(show_logs=True):
@@ -1814,7 +1715,6 @@ def go_next():
             database_name = next.stage
             enterInDatabase(database_name, 'not checked')
             linked_stages.move_stage_forward(linked_stages)
-            print('moved forward')
         elif(next.stage_type == 'collection'):
             collection_path_full = next.path
             collection_path_splitted = collection_path_full.split('/')
@@ -1928,57 +1828,14 @@ def remove_identifier():
         return True
 
 
-def get_recent_port():
-    try:
-        with open("config.yaml", "r") as f:
-            data = yaml.safe_load(f)
-            if(data == None):
-                return None
-
-            return data.get("recent_port")
-    except (FileNotFoundError, yaml.YAMLError):
-        return None
-
-
-def save_port(port):
-    try:
-        data = {'recent_port': int(port)}
-        with open('config.yaml', "w") as f:
-            yaml.dump(data, f)
-            return True
-    except (FileNotFoundError):
-        return False
-
-
-def remove_port():
-    try:
-        key = 'recent_port'
-        with open('config.yaml', 'r') as f:
-            data = yaml.load(f)
-            if(data is None):
-                print(YELLOW+"\nRecent port not found"+RESET)
-                return True
-        if data is not None and key in data:
-            del data[key]
-
-        with open('config.yaml', 'w') as f:
-            yaml.dump(data, f)
-
-        print(GREEN + '\nRemoved the recent port, restarting the process...'+RESET)
-        main()
-        return True
-
-    except (FileNotFoundError):
-        create_config_yaml()
-        print(GREEN + '\nRemoved recent port successfully'+RESET)
-        return True
-
 
 def start_service():
+    global boolStatus
+    global mongoStatus
     if boolStatus is False and mongoStatus == 'Stopped':
         start = start_mongodb_service()
         if start['type'] == 'success':
-            boolStatus = status.check_mongo_status()
+            boolStatus = check_mongo_status()  
             mongoStatus = 'Running'
         showStatus()
     else:
@@ -1986,11 +1843,13 @@ def start_service():
 
 
 def stop_service():
+    global boolStatus
+    global mongoStatus
     if boolStatus is True and mongoStatus == 'Running':
         from mongodb_service_handler import stop_mongodb_service
         stop = stop_mongodb_service()
         if(stop['type'] == 'success'):
-            boolStatus = status.check_mongo_status()
+            boolStatus = check_mongo_status()
             mongoStatus = 'Stopped'
         showStatus()
     else:
@@ -1998,10 +1857,12 @@ def stop_service():
 
 
 def restart_service():
+    global boolStatus
+    global mongoStatus
     from mongodb_service_handler import restart_mongodb_service
     restart = restart_mongodb_service()
     if restart['type'] == 'success':
-        boolStatus == status.check_mongo_status()
+        boolStatus == check_mongo_status()
         mongoStatus = 'Running'
     showStatus()
 
@@ -2015,17 +1876,25 @@ global_commands = {
 client = None
 
 
+def remove_current_port():
+    remover = remove_port(main) 
+    if(remover == True): 
+       print(GREEN + "\nPort has been removed successfully"+RESET)
+       return True
+    print(RED + "\nUnable to remove port, please try again!"+RESET)
+    return False
+
 def connect(port):
     global client
     try:
-        client = MongoClient(f"mongodb://localhost:{port}")
+        client = pymongo.MongoClient(f"mongodb://localhost:{port}")
         return True
     except Exception as e:
         print(RED + "\nUnable to connect with mongodb, try again!" + RESET)
         return False
 
 
-boolStatus = status.check_mongo_status()
+boolStatus = check_mongo_status()
 mongoStatus = 'Running' if boolStatus == True else "Stopped"
 
 showStatus()
@@ -2042,7 +1911,6 @@ commands = {
     'restart': restart_executer,
     'show collections': show_collections,
     'choose collection': choose_collection,
-    'errors': show_errors,
     'info': get_info,
     'read all': get_collection_data,
     'delete all': delete_documents,
@@ -2054,26 +1922,15 @@ commands = {
     'forward': go_next,
     'go next': go_next,
     'remove selection': remove_selection,
-    'delete selected': delete_selected,
+    'delete selected': lambda remove_message = 'do not show',type='filter':delete_selected(remove_message,type),
     'select all': select_all,
     'set identifier': set_identifier,
     'set identifiers': set_identifier,
     'remove identifier': remove_identifier,
     'remove identifiers': remove_identifier,
+    'remove port':remove_current_port,
     'status': showStatus
 }
-
-
-def check_mongo_running(port):
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1)
-            s.connect(('localhost', port))
-        return True
-    except ConnectionRefusedError:
-        return False
-    except socket.timeout:
-        return False
 
 
 def main():
@@ -2082,6 +1939,7 @@ def main():
 
     try:
         recent_port = get_recent_port()
+
         while True:
             if recent_port is not None:
                 connect(recent_port)
@@ -2113,6 +1971,7 @@ def main():
                         print(
                             GREEN + '\nSuccessfully connected to the MongoDB, port is saved as default to change the port use command "change port {port name}"' + RESET)
                         save_port(int(command))
+                        main()
                     else:
                         print(
                             RED + "\nFailed to connect, because MongoDB is not running on the given port")

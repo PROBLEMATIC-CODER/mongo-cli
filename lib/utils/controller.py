@@ -1,6 +1,5 @@
 import subprocess
 import sys
-import shutil
 
 
 def save_changes(file_path):
