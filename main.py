@@ -26,8 +26,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'stages'))
+sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'operation_helpers'))
 
 from lib.stages.linked_stages import LinkedStages
+from lib.operation_helpers.formatter import *
+from lib.operation_helpers.string_converter import *
+from lib.operation_helpers.value_processor import *
 
 print(BLUE+'\n\n----------------------------------------------- Welcome To MongoDB Command Line Control System -----------------------------------------'+RESET + '\n\n')
 
@@ -89,71 +93,6 @@ def showStatus():
 def commandNotFound(command):
     print(RED+f'\nERROR:No such command found with name {command}'+RESET)
     return True
-
-
-def process_value(value):
-    if value is None:
-        return None
-
-    if type(value) != int and type(value) != bool:
-        if value.startswith("[") and value.endswith("]"):
-            value = value.strip("[]")
-            items = value.split(",")
-            processed_items = []
-            for item in items:
-                processed_items.append(process_value(item))
-            return processed_items
-        elif value.startswith("{") and value.endswith("}"):
-            value = value.strip("{}")
-            pairs = re.findall(r"(\w+):(\[.*?\]|'.*?'|\{.*?\}|[\w\s]+)", value)
-            obj = {}
-            for key, val in pairs:
-                obj[key] = process_value(val)
-            return obj
-        elif value.startswith("'") and value.endswith("'"):
-            return value.strip("'")
-
-        elif value.isdigit():
-            return int(value)
-        elif value.lower() == 'true' or value.lower() == 'false':
-            return bool(value)
-        elif(value == 'null'):
-            return None
-        return value
-    else:
-        return value
-
-
-def process_insertion_data(command):
-    command = command.strip()
-    command = command.replace("insert", "")
-    if(len(command) > 0):
-        pairs = re.findall(
-            r"(\w+)\seq\s(\[.*?\]|'.*?'|\{.*?\}|[\w\s]+)", command)
-        data = {}
-
-        for key, value in pairs:
-            data[key] = process_value(value)
-
-        return data
-    else:
-        print(RED+'\nERROR: Please give data to insert in the document'+RESET)
-        return False
-
-
-def process_direct_insertion_data(data):
-    if(len(data) > 0):
-        pairs = re.findall(r"(\w+):(\[.*?\]|'.*?'|\{.*?\}|[\w\s]+)", data)
-        storage = {}
-
-        for key, value in pairs:
-            key, value = key.strip(), value.strip()
-            storage[key] = process_value(value)
-
-        return storage
-    else:
-        print(RED+'\nERROR: Please give data to insert in the document'+RESET)
-        return False
 
 
 def showDB():
@@ -365,25 +304,6 @@ class CustomJSONEncoder(JSONEncoder):
         return super().default(obj)
 
 
-def format_key_value(key, value):
-    if key == "_id":
-        return f"{key}: {str(value)}"
-    elif isinstance(value, str):
-        return f"{key}: {value}"
-    else:
-        return f"{key}: {json.dumps(value, cls=CustomJSONEncoder)}"
-
-
-def format_document(document):
-    formatted_data = "{\n"
-    for key, value in document.items():
-        formatted_data += f"    {format_key_value(key, value)},\n"
-    formatted_data = formatted_data.rstrip(",\n") + "\n"
-    formatted_data += "}"
-
-    return formatted_data
-
-
 def get_collection_data():
     try:
         if(collection != None and db != None):
@@ -424,33 +344,6 @@ def delete_documents():
         print(RED+"Invalid process to delete document"+RESET)
 
 
-def convert_string_to_dict(input_str):
-    pairs = input_str.split(',')
-    result = {}
-    for pair in pairs:
-        key = key.strip()
-        value = value.strip()
-        # Process the value to the appropriate data type
-        if value.startswith('[') and value.endswith(']'):
-            # Value is a list
-            value = value.strip('[]')
-            value = [int(num) if num.isdigit()
-                     else num for num in value.split(',')]
-        elif value.startswith('{') and value.endswith('}'):
-            # Value is a dictionary
-            value = value.strip('{}')
-            # Use eval to evaluate the string as a dictionary
-            value = eval(value)
-        elif value.startswith("'") and value.endswith("'"):
-            # Value is a string
-            value = value.strip("'")
-        elif value.isdigit():
-            # Value is an integer
-            value = int(value)
-
-        result[key] = value
-
-    return result
 
 
 def conditional_delete(command):
@@ -600,17 +493,6 @@ def insert_one(data):
     else:
         print(RED+"ERROR: Process of insertion is invalid")
 
-
-def process_insertion_many_data(data):
-    processed_data = {}
-    pairs = data.split(',')
-    pairs = [pair.strip() for pair in pairs]
-    for pair in pairs:
-        pair_parts = pair.split(' eq ')
-        key, value = pair_parts[0], pair_parts[1]
-        value = process_value(value)
-        processed_data[key] = value
-    return processed_data
 
 
 def insert_many(command):
@@ -873,18 +755,6 @@ def show_selected():
         return False
 
 
-def convert_string_to_array(string):
-    try:
-        array = ast.literal_eval(string)
-        if isinstance(array, list):
-            return array
-        else:
-            raise ValueError("Input is not a valid list.")
-    except (SyntaxError, ValueError) as e:
-        print("Error:", str(e))
-        return None
-
-
 def edit_selected_documents(command, reselect=True):
     if collection is not None and db is not None:
         command = command.replace('edit', '')
@@ -935,17 +805,6 @@ def edit_selected_documents(command, reselect=True):
             print(
                 YELLOW + f"\nUnable to edit {'document with id' if len(not_updated_ids) == 0 else 'documents with ids - '} {(',').join(str(id) for id in not_updated_ids)}"+RESET) if not_updated_count > 0 else None
 
-
-def convert_string_value(value):
-    if value.lower() == 'true':
-        value = True
-    elif value.lower() == 'false':
-        value = False
-    elif value.lower() == 'null' or len(value) == 0:
-        value = None
-    elif value.isdigit():
-        value = int(value)
-    return value
 
 
 def add_fields(command, reselect=True, add_type='select'):
@@ -2223,9 +2082,7 @@ def main():
 
     try:
         recent_port = get_recent_port()
-
         while True:
-            linked_stages.print_stages(linked_stages)
             if recent_port is not None:
                 connect(recent_port)
                 command = input(BLUE + f'\n{currentURI} ' + RESET)
