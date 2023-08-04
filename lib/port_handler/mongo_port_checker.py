@@ -11,10 +11,8 @@ def check_mongo_running(port):
             s.settimeout(1)
             s.connect(('localhost', port))
         return True
-    except ConnectionRefusedError:
-        return False
-    except socket.timeout:
-        return False
+    except Exception: 
+        return False    
 
 
 def check_mongo_status():

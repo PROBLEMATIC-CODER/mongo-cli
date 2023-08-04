@@ -1293,7 +1293,8 @@ def go_next():
         return False
 
 
- 
+boolStatus = check_mongo_status()
+mongoStatus = 'Running' if boolStatus == True else "Stopped"
 
 def start_service():
     global boolStatus
@@ -1351,8 +1352,7 @@ def remove_current_port():
 
 
 
-boolStatus = check_mongo_status()
-mongoStatus = 'Running' if boolStatus == True else "Stopped"
+
 
 showStatus()
 
@@ -1361,9 +1361,6 @@ commands = {
     'start mongo': start_service,
     'stop mongo': stop_service,
     'restart mongo': restart_service,
-    'show dbs': lambda client=client:showDB(client),
-    'show database': lambda client=client:showDB(client),
-    'show databases': lambda client=client:showDB(client),
     'choose db': chooseDB,
     'restart': restart_executer,
     'choose collection': choose_collection,
@@ -1381,7 +1378,7 @@ commands = {
     'status': showStatus
 }
 
-args_processed_commands = ['delete all','delete selected','set identifier','unset identifier']
+args_processed_commands = ['delete all','delete selected','set identifier','unset identifier','show dbs','show databases']
 
 def args_processed_command(command): 
     parts = command.split(' ')
@@ -1395,6 +1392,8 @@ def args_processed_command(command):
             
         elif command == 'unset identifier' or command == 'unset identifiers':
             remove_identifier(db,collection,globally_selected_docs,selected_docs_id)
+        elif command == 'showdbs' or command == 'show databases':
+            showDB(client)
 
 def main():
     global boolStatus
@@ -1403,7 +1402,8 @@ def main():
 
     try:
         recent_port = get_recent_port()
-
+        if recent_port is not None:
+            connect(recent_port)
         while True:
             if recent_port is not None:
                 command = input(BLUE + f'\n{currentURI} ' + RESET)
@@ -1437,6 +1437,8 @@ def main():
                         print(
                             GREEN + '\nSuccessfully connected to the MongoDB, port is saved as default to change the port use command "change port {port name}"' + RESET)
                         save_port(int(command))
+                        boolStatus = check_mongo_running(int(command))
+                        mongoStatus = "Running" if boolStatus == True else "Stopped"
                         main()
                     else:
                         print(
