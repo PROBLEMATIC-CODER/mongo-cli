@@ -15,8 +15,8 @@ from port_handler.port_operations import get_recent_port
 from utils.text_colors import GREEN,RESET
 
 recent_port = get_recent_port()
-
-client = MongoClient(f"mongodb://localhost:{recent_port}")
+if(recent_port is not None):
+    client = MongoClient(f"mongodb://localhost:{recent_port}")
 
 def get_info():
     admin = client.admin

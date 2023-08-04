@@ -47,11 +47,12 @@ def get_recent_port():
     try:
         with open("config.yaml", "r") as f:
             data = yaml.safe_load(f)
-            if(data == None):
-                return None
+        if(data == None):
+            return None
 
-            return data.get("recent_port")
+        return data.get("recent_port")
     except (FileNotFoundError, yaml.YAMLError):
+
         return None
 
 

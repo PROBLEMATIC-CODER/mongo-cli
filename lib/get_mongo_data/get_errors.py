@@ -16,8 +16,9 @@ from utils.text_colors import GREEN,RESET,RED,PURPLE
 
 recent_port = get_recent_port()
 
-client = MongoClient(f"mongodb://localhost:{recent_port}")
-admin_db = client.admin
+if(recent_port is not None):
+    client = MongoClient(f"mongodb://localhost:{recent_port}")
+    admin_db = client.admin
 
 
 
