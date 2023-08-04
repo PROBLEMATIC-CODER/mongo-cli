@@ -223,7 +223,6 @@ def choose_collection():
         return False
 
 
-
 def drop(name):
     if(db is None):
         drop_db(client,name.strip())
@@ -257,7 +256,7 @@ def get_direct_access(db_name, collection_name, show_logs=True):
             updateURI(f'{db_exists["name"]}/{collection_name}')
             print(
                 GREEN + f' \nSuccefully accessed {collection_name} of {db_name}' + RESET) if show_logs is True else None
-            do_stage_exists = linked_stages.do_stage_exists(
+            do_stage_exists = linked_stages.do_stage_exists( 
                 current_collection.strip(),linked_stages)
             if(do_stage_exists == False):
                 create_stage(collection_name.strip(), 'collection',
