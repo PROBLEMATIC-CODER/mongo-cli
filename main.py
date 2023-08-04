@@ -17,6 +17,9 @@ sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'stages'))
 sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'operation_helpers'))
 sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'port_handler'))
 sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'get_mongo_data'))
+sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'database_operations'))
+sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'collection_operations'))
+sys.path.append(os.path.join(SCRIPT_DIR, 'lib', 'document_operations'))
 
 from lib.stages.linked_stages import LinkedStages
 from lib.operation_helpers.formatter import *
@@ -26,6 +29,18 @@ from lib.port_handler.port_operations import *
 from lib.port_handler.mongo_port_checker import *
 from lib.get_mongo_data.get_errors import get_recent_logs
 from lib.get_mongo_data.get_info import get_info
+from lib.database_operations.operations import *
+from lib.operation_helpers.type_checker import *
+from lib.document_operations.operations.deletion import *
+from lib.document_operations.operations.insertion import *
+from lib.document_operations.operations.count_docs import count
+from lib.document_operations.operations.sort_documents import sort_documents
+from lib.collection_operations.operations.read_data import get_collection_data
+from lib.collection_operations.operations.show_collections import show_collections
+from lib.collection_operations.operations.check_exists import check_collection_exists
+from lib.collection_operations.operations.create_collections import create_collection
+
+
 
 
 print(BLUE+'\n\n----------------------------------------------- Welcome To MongoDB Command Line Control System -----------------------------------------'+RESET + '\n\n')
@@ -46,12 +61,22 @@ not_to_move_forward = False
 stage_moved = False
 is_home_stage_created = False
 
+def connect(port):
+    global client
+    try:
+        client = pymongo.MongoClient(f"mongodb://localhost:{port}")
+        return True
+    except Exception as e:
+        print(RED + "\nUnable to connect with mongodb, try again!" + RESET)
+        return False
+    
+recent_port = get_recent_port()
+connect(recent_port) if recent_port is not None else None
+
 
 def restart_executer():
     path = os.path.abspath(__file__)
     restart_controller_child(path)
-
-
 
 
 def showStatus():
@@ -64,18 +89,6 @@ def showStatus():
 def commandNotFound(command):
     print(RED+f'\nERROR:No such command found with name {command}'+RESET)
     return True
-
-
-def showDB():
-    databases = client.list_database_names()
-    if len(databases) > 0:
-        print(GREEN + '\nAvailable Databases :\n')
-        for i, database in enumerate(databases, start=1):
-            print(GRAY + BOLD + f' {i}. ' + YELLOW + database + RESET)
-        return True
-    else:
-        print(YELLOW + "\nNo Database available, use 'create database' command to create one"+RESET)
-        return True
 
 def chooseDB():
     global current_database
@@ -105,17 +118,14 @@ def chooseDB():
     else:
         print(RED + f"Unable to choose {current_database} database" + RESET)
 
-
 def updateURI(update):
     global currentURI
     currentURI = f"MongoDB Contoller/{update}>"
-
 
 def create_stage(stage_name, stage_type, path=None, stage_filter=None, selection_type=None):
     linked_stages.add_stage(linked_stages,stage_name, stage_type,
                             filter=stage_filter, path=path, selection_type=selection_type)
     return True
-
 
 def clear_selected():
     global selected_documents_filter
@@ -123,14 +133,13 @@ def clear_selected():
     globally_selected_docs.clear()
     selected_documents_filter = ''
 
-
 def enterInDatabase(database, type):
     clear_selected()
     try:
         global db
         global current_database
         if(type != 'checked'):
-            db_exists = check_db_exists(database.lower())
+            db_exists = check_db_exists(client,database.lower())
             if db_exists['exists']:
                 current_database = db_exists['name']
                 updateURI(current_database)
@@ -151,24 +160,6 @@ def enterInDatabase(database, type):
 
     except Exception as e:
         return False
-
-
-
-def show_collections():
-    if db != None:
-        collections = db.list_collection_names()
-        if len(collections) > 0:
-            print(GREEN + f'\nAvailable Collections of {db.name}:\n' + RESET)
-            for index, collection in enumerate(collections, start=1):
-                print(GRAY + f'   {index}.' + RESET +
-                      YELLOW + f' {collection}' + RESET)
-            return True
-        else:
-            print(
-                RED + f"\nDatabase {current_database} is empty, use 'create collection' command to create a collection"+RESET)
-            return True
-    else:
-        print(RED+f"\nNo Databases are choosen yet, please choose a database to see collections or see directly"+RESET)
 
 
 def enterInCollection(collection_name, type):
@@ -233,124 +224,11 @@ def choose_collection():
 
 
 
-def get_collection_data():
-    try:
-        if(collection != None and db != None):
-            documents = db[current_collection].find()
-            data = []
-            document_count = collection.count_documents({})
-            if(document_count > 0):
-                print(
-                    GREEN+f"\nDocuments of collection {current_collection} is given below - \n" + RESET)
-                for document in documents:
-                    formatted_data = format_document(document)
-                    print(PURPLE + f'\n{formatted_data}'+RESET)
-                return True
-            else:
-                print(
-                    YELLOW + '\nCollection is empty!, you can use "insert" command for inserting documents' + RESET)
-
-        else:
-            print(RED+f"\nERROR: Invalid process of reading documents"+RESET)
-            return False
-    except:
-        print(RED + "\nUnable to read collection documents" + RESET)
-        return False
-
-
-def delete_documents():
-    if collection != None and db != None:
-        document_count = collection.count_documents({})
-        if(document_count > 0):
-            deletion = collection.delete_many({})
-            print(
-                GREEN + f'\nSuccessfully deleted all documents of {current_collection}' + RESET)
-            print(GREEN + f'\nDelete Count : {deletion.deleted_count}' + RESET)
-        else:
-            print(GREEN + "\nCollection is already cleared up" + RESET)
-
-    else:
-        print(RED+"Invalid process to delete document"+RESET)
-
-
-def conditional_delete(command):
-    command = command.replace('delete with', '').strip()
-    command_parts = command.split('eq')
-    command_parts = [v.strip() for v in command_parts]
-    key, value = command_parts[0], command_parts[1]
-    if(collection != None and db != None):
-        try:
-            if(is_list(value) == True):
-                value = convert_string_to_array(value)
-            value = convert_string_value(value)
-            processed_deletion_filter = {key: value}
-            deletion = collection.delete_many(processed_deletion_filter)
-            if(deletion.deleted_count > 0):
-                print(
-                    GREEN + f"\nSuccessfully Deleted {deletion.deleted_count} documents" + RESET)
-                return True
-            else:
-                print(
-                    YELLOW + f"\nNo such document exists with {command} in {current_collection}" + RESET)
-
-                return False
-        except Exception as e:
-            print(e)
-            print(
-                RED + f"\nERROR : Any error accured while deleting the documents, error is - {e}"+RESET)
-            return False
-    else:
-        print(RED + f"\nERROR - Invalid process of document deletion" + RESET)
-        return False
-
-
-def drop_database(database_name: str) -> bool:
-    check_exists = check_db_exists(database_name)
-    if(check_exists['exists'] == True):
-        try:
-            client.drop_database(database_name)
-            print(GREEN + "\nDatabase dropped successfully"+RESET)
-            return True
-        except Exception as e:
-            print(
-                RED + f"\nERROR: An error occurred while deleting the database: {e}" + RESET)
-            return False
-    else:
-        print(
-            RED + f"\nERROR : No such database with name {database_name}"+RESET)
-        return False
-
-
-def drop_collection(collection_name: str) -> bool:
-    if(db != None):
-        db.drop_collection(collection_name)
-        print(
-            GREEN + f"\nCollection with name {collection_name} has been successfully deleted with "+RESET)
-        return True
-    else:
-        print(RED + f'\nERROR : Please choose a database first to drop collection'+RESET)
-        return False
-
-
 def drop(name):
     if(db is None):
-        check_exists = check_db_exists(name.strip())
-        if(check_exists['exists'] == True):
-            try:
-                client.drop_database(name.strip())
-                print(GREEN + "\nDatabase dropped successfully"+RESET)
-                return True
-            except Exception as e:
-                print(
-                    RED + f"\nERROR: An error occurred while deleting the database: {e}" + RESET)
-                return False
-        else:
-            print(
-                RED + f"\nERROR : No such database with name {name.strip()}"+RESET)
-            return False
+        drop_db(client,name.strip())
     else:
-        print(name)
-        check_exists = check_collection_exists(current_database, name.strip())
+        check_exists = check_collection_exists(client,current_database,name.strip())
         if(check_exists == True):
             db.drop_collection(name.strip())
             print(
@@ -362,146 +240,15 @@ def drop(name):
                 YELLOW + f"\nCollection with name {name.strip()} do not exists!, try again with another collection name!"+RESET)
             return False
 
-
-def create_collection(collection_name: str) -> bool:
-    if(db != None):
-        do_collection_exists = check_collection_exists(
-            current_database, collection_name.strip())
-        if(do_collection_exists == False):
-            db.create_collection(collection_name)
-            print(
-                GREEN + f"\nCollection successfully created with name {collection_name}, you can access this using 'use {collection_name.strip()}'" + RESET)
-            return True
-        else:
-            print(
-                YELLOW + f"\nCollection with name {collection_name.strip()} already exists!, try again with another collection name"+RESET)
-    else:
-        print(RED + f'ERROR : Please choose a database first to create a new collection!'+RESET)
-        return False
-
-
-def create_database(database_name: str) -> bool:
-    try:
-        do_db_exists = check_db_exists(database_name.strip())
-        if(not do_db_exists['exists']):
-            new_database = client[f'{database_name.strip()}']
-            if new_database is not None:
-                initial_collection = new_database['data']
-                initial_collection.insert_one(
-                    {'from': 'MongoDB Controller CLI', 'description': "This document is initially added by the MongoDB Controller CLI. You can delete it."})
-                print(
-                    GREEN + f"\nSuccessfully created {database_name}, you can access it using 'run {database_name}'"+RESET)
-                return True
-            else:
-                print(RED + "\nUnable to create database"+RESET)
-                return False
-        else:
-            print(
-                YELLOW + f"\nDatabase with name {database_name} already exists, try again with another name!"+RESET)
-            return False
-    except Exception as e:
-        print(
-            RED + f"\nAn error occurred while creating the database: {e}"+RESET)
-        return False
-
-
-def insert_one(data):
-    if(collection != None and db != None):
-        try:
-            insert = collection.insert_one(data)
-            document = collection.find_one({'_id': insert.inserted_id})
-            formatted_doc = format_document(document)
-            print(
-                GREEN+f"\nDocument inserted successfully : {formatted_doc}"+RESET)
-        except Exception as e:
-            print(
-                RED+f"Error: Insertion couldn't be done because of error : {e}"+RESET)
-            return False
-    else:
-        print(RED+"ERROR: Process of insertion is invalid")
-
-
-def insert_many(command):
-    command = command.replace('insert', '').strip()
-    if(collection is not None and db is not None):
-        documents_to_insert = command.split(' and ')
-        bulk_write_operation = []
-        try:
-            for doc in documents_to_insert:
-                processed_document = process_insertion_many_data(doc)
-                insertion_query = InsertOne(processed_document)
-                bulk_write_operation.append(insertion_query)
-            collection.bulk_write(bulk_write_operation)
-            print(
-                GREEN + "\nSuccessfully inserted documents. You can see them using command 'read all'"+RESET)
-            return True
-
-        except Exception as e:
-            print(RED + "\nUnable to insert many documents due to some error"+RESET)
-            return False
-
-    else:
-        print(RED + "\nERROR : Invalid process of inserting documents"+RESET)
-        return False
-
-
-def insert_one_direct(data, collection_name):
-    if(db != None):
-        collection_exists = check_collection_exists(
-            current_database, collection_name)
-        if(collection_exists):
-            collection = db[collection_name]
-            try:
-                insertion = collection.insert_one(data)
-                insertion_id = insertion.inserted_id
-                doc = collection.find_one({'_id': insertion_id})
-                formatted_doc = format_document(doc)
-                print(
-                    GREEN + f"\nSucccessfully inserted document - \n{formatted_doc}")
-                return True
-            except Exception as e:
-                print(
-                    RED + f"\nFailed to insert document because of {e}"+RESET)
-                return False
-        else:
-            print(
-                RED+f"\nError: No collection exists with name {collection_name}")
-    else:
-        print(RED+f"ERROR: Process of insertion invalid"+RESET)
-
-
-def check_db_exists(name):
-    dbs = client.list_database_names()
-    lowercase_db = [item.strip().lower() for item in dbs]
-    if name.lower() in lowercase_db:
-        lower_index = lowercase_db.index(name.lower())
-        db_name = dbs[lower_index]
-        return {'exists': True, 'name': db_name}
-    else:
-        return {'exists': False}
-
-
-def check_collection_exists(db_name, collection_name):
-    db = client[db_name]
-    available_collections = db.list_collection_names()
-    lowercase_collection = [item.strip().lower()
-                            for item in available_collections]
-    if(collection_name.lower() in lowercase_collection):
-        return True
-    else:
-        return False
-
-
 def get_direct_access(db_name, collection_name, show_logs=True):
     global db
     global current_database
     global collection
     global current_collection
     clear_selected()
-    db_exists = check_db_exists(db_name)
+    db_exists = check_db_exists(client,db_name)
     if db_exists['exists'] == True:
-        collection_exists = check_collection_exists(
-            db_exists['name'], collection_name)
+        collection_exists = check_collection_exists(client,db_exists['name'],collection_name.strip())
         if(collection_exists == True):
             db = client[db_exists['name']]
             current_database = db_exists['name']
@@ -527,32 +274,6 @@ def get_direct_access(db_name, collection_name, show_logs=True):
         print(
             RED + f"\nERROR: No such database exists with name {db_name}" + RESET) if show_logs is True else None
         return False
-
-
-def delete_selected(remove_message='show', type='select'):
-    if(db != None and collection != None):
-        if(len(selected_docs_id) > 0):
-            deletion_count = 0
-            try:
-                collection.delete_many({'_id': {'$in': selected_docs_id}})
-                deletion_count += 1
-            except Exception as e:
-                print(
-                    RED+f"\nERROR: Any error accured while deleting the documents- {e}"+RESET)
-                return False
-            if(type == 'select'):
-                print(
-                    GREEN+"\nSuccefully deleted all document from the collection which have been selected recently"+RESET)
-            else:
-                print(GREEN + "\nSuccessfully deleted the filtered documents"+RESET)
-
-            remove_selection(remove_message)
-            print(
-                YELLOW + "\nSelection has been removed. You can select new documents again."+RESET) if remove_message == 'show' else None
-
-        else:
-            print(YELLOW + "\nNothing to delete from selection stack" + RESET)
-            return False
 
 
 def remove_selection(message='show'):
@@ -681,7 +402,6 @@ def show_selected():
         return False
 
 
-
 def edit_selected_documents(command, reselect=True):
     if collection is not None and db is not None:
         command = command.replace('edit', '')
@@ -733,7 +453,6 @@ def edit_selected_documents(command, reselect=True):
                 YELLOW + f"\nUnable to edit {'document with id' if len(not_updated_ids) == 0 else 'documents with ids - '} {(',').join(str(id) for id in not_updated_ids)}"+RESET) if not_updated_count > 0 else None
 
 
-
 def add_fields(command, reselect=True, add_type='select'):
     try:
         if db is not None and collection is not None:
@@ -768,7 +487,7 @@ def add_fields(command, reselect=True, add_type='select'):
                                 RED + f'\nERROR: Unable to add a new field to the document with id {doc_id} because of an error - {e}')
 
                 call_to_select_document() if reselect == True else None
-                print(GREEN + f"\nSuccessfully updated {'all' if len(selected_docs_id) == update_count else update_count} {'filtered' if add_type == 'filter' else 'selected'} documents. You can see the changes by using the command {'show selected' if add_type == 'select' else 'read all'}." + RESET)
+                print(GREEN + f"\nSuccessfully updated added given field to {'all' if len(selected_docs_id) == update_count else update_count} {'filtered' if add_type == 'filter' else 'selected'} documents. You can see the changes by using the command {'show selected' if add_type == 'select' else 'read all'}." + RESET)
 
                 if not_updated_count > 0:
                     print(
@@ -785,27 +504,6 @@ def add_fields(command, reselect=True, add_type='select'):
             RED + f'\nERROR: Unable to add field to {"selected documents" if add_type == "select" else "filtered documents"}')
 
         return False
-
-
-def split_command_fields(command):
-    fields = []
-    field = ""
-    within_list = False
-
-    for char in command:
-        if char == "," and not within_list:
-            fields.append(field.strip())
-            field = ""
-        else:
-            if char == "[":
-                within_list = True
-            elif char == "]":
-                within_list = False
-            field += char
-
-    fields.append(field.strip())
-
-    return fields
 
 
 def call_to_select_document():
@@ -867,69 +565,6 @@ def remove_field(command, reselect=True):
         print(f'A\nny error accured while removing field error is - {e}')
 
 
-def is_list(value):
-    if value.startswith("[") and value.endswith("]"):
-        return True
-    else:
-        return False
-
-
-def count(command):
-    try:
-        command = command.replace('count', '').strip()
-        if(command == 'selected'):
-            if(selected_docs_id != None):
-                count = len(selected_docs_id)
-                print(
-                    GREEN + f"\nCurrent Filter : {selected_documents_filter}"+RESET)
-                print(
-                    GREEN + f"\nCount of currently selected {'document is' if count == 1 else 'documents are' }  {count} " + RESET)
-                return True
-            else:
-                print(YELLOW + "\nNothing has been selected yet" + RESET)
-                return False
-        elif(command == 'documents' or command == 'docs'):
-            if(db != None and collection != None):
-                documents_count = collection.count_documents({})
-                if(documents_count == 0):
-                    print(
-                        GREEN + f'\nCollection is currently empty user "insert one" command to insert a new document'+RESET)
-                    return True
-                else:
-                    print(
-                        GREEN + f"\n{current_collection} collection contains {documents_count} documents init."+RESET)
-        elif(command == 'collections' or command == 'collection'):
-            if(db != None and client != None):
-                collection_count = db.list_collection_names()
-                if(len(collection_count) > 0):
-                    print(
-                        GREEN + f'\nCount of collections available in {current_database} is {len(collection_count)}' + RESET)
-                else:
-                    print(
-                        YELLOW + f"\nNo collections are currently available in {current_database}, to create use command 'create collection'")
-            else:
-                print(RED + "\nERROR : Process of getting collection count is invalid")
-                return False
-        else:
-            commandNotFound(f'count {command}')
-            return False
-    except:
-        print(RED + f"\nERROR : Unable to count {command}")
-        return False
-
-
-def check_type_array(document, key_to_check: str) -> bool:
-    try:
-        if isinstance(document[key_to_check], list):
-            return True
-        else:
-            return False
-    except:
-        return False
-
-
-def is_dict(value):
-    return value.startswith('{') and value.endsWith('}')
 
 
 def append_in_arr_field(command, type='selection'):
@@ -1199,52 +834,6 @@ def search_text(command):
         print(RED + "ERROR: Invalid process of searching text" + RESET)
 
 
-def sort_collection(command):
-    if(db is not None and collection is not None):
-        command = command.replace('sort', '').strip()
-        sorting_pair = command.split(' ')
-        sorting_tasks = command.split(' and ')
-        sorting_order_in_command = command.split(' in ')
-        order = pymongo.ASCENDING
-        if len(sorting_order_in_command) > 1:
-            given_sorting_order = sorting_order_in_command[1].strip()
-            if(given_sorting_order == 'a' or given_sorting_order == 'd'):
-                order = pymongo.ASCENDING if given_sorting_order == 'a' else pymongo.DESCENDING
-
-        to_sort_with = sorting_pair[1]
-
-        sorted_docs = list(collection.find().sort(to_sort_with, order))
-
-        print(
-            GREEN + f"\nSorted docs in {'ascending' if order == 1 else 'descending'} using {to_sort_with} field is given below - "+RESET)
-
-        for docs in sorted_docs:
-            formatted_doc = format_document(docs)
-            print(PURPLE + f'\n{formatted_doc}' + RESET)
-
-        if(len(sorting_tasks) > 1):
-            task = sorting_tasks[1]
-            if(task.lower() == 'save'):
-                collection.delete_many({})
-                collection.insert_many(sorted_docs)
-        return True
-    else:
-        print(RED + "\nERROR : Process of sorting a collection is invalid" + RESET)
-        return False
-
-
-def create_config_yaml():
-    filename = 'config.yaml'
-    try:
-        # Open the file in 'exclusive creation' mode ('x')
-        with open(filename, 'x') as file:
-            # Writing to the file (optional)
-            file.write("Hello, this is a new file!")
-        return True
-    except IOError as e:
-        return False
-
-
 
 def parseCommand(command):
     try:
@@ -1265,16 +854,16 @@ def parseCommand(command):
             elif len(parts) >= 2 and (parts[0] == 'new' or parts[0] == 'create') and parts[1] == 'collection':
                 collection_name = parts[2]
                 if(collection_name):
-                    create_collection(collection_name)
+                    create_collection(client,db,current_database,collection_name.strip(),check_collection_exists)
             elif (len(parts) >= 2 and (parts[0] == 'new' or parts[0] == 'create') and parts[1] == 'db'):
                 database_name = parts[2]
                 if(database_name):
-                    create_database(database_name)
+                    create_database(client,database_name)
                 else:
                     commandNotFound(command)
             elif (len(parts) >= 4 and (parts[0] == 'delete' and parts[1] == 'with')):
-                conditional_delete(command)
-            elif len(parts) == 2 and (parts[0] == 'drop' or parts[0] == 'delete'):
+                conditional_delete(command,collection,db,current_collection)
+            elif len(parts) == 2 and (parts[0] == 'drop'):
                 command_part = command.split(' ')
                 name = command_part[1].strip()
                 drop(name)
@@ -1288,27 +877,22 @@ def parseCommand(command):
                 enterInCollection(collection_name, 'not checked')
 
             elif len(parts) >= 3 and parts[0] == 'sort' and parts[1] == 'using':
-                sort_collection(command)
+                sort_documents(db,collection,command,format_document)
 
             elif (len(parts) >= 3 and parts[0] == 'insert'):
                 insertion_type_array = command.split(' and ')
                 if len(insertion_type_array) <= 1:
-                    proccessed_data = process_insertion_data(command)
-                    if(proccessed_data != False):
-                        insert_one(proccessed_data)
+                    processed_data = process_insertion_data(command)
+                    if(processed_data != False):
+                        insert_one(db,collection,processed_data)
                     else:
                         print(RED + "\nData processing error"+RESET)
                 else:
-                    insert_many(command)
-            elif len(parts) >= 5 and (parts[0] == 'insert' and parts[1] == 'one' and parts[2] == 'in'):
-                collection_name = parts[3]
-                data = parts[4]
-                processed_data = process_direct_insertion_data(data)
-                insert_one_direct(processed_data, collection_name)
+                    insert_many(command,db,collection)
             elif (len(parts) >= 3 and parts[0] == 'value' and parts[1] == 'of'):
                 get_selected_value(command)
             elif (len(parts) >= 2 and parts[0] == 'count'):
-                count(command)
+                count(command,client,selected_docs_id,selected_documents_filter,db,collection,current_collection,current_database,commandNotFound)
             elif(len(parts) >= 4 and parts[0] == 'append'):
                 append_in_arr_field(command)
             elif len(parts) >= 4 and parts[0] == 'pop' and parts[2] == 'from':
@@ -1339,18 +923,21 @@ def parseCommand(command):
                     return True
                 print(RED + "\nInvalid command for getting recent logs"+RESET)
                 return False
+            elif command == 'read all':
+                get_collection_data(collection,db,current_collection,format_document)
+            elif command == 'show collections' or command == 'show collection':
+                show_collections(db,current_database)
             else:
                 print(
                     RED+f"\nGiven '{command}' is invalid, please try valid one. To see all commands type commands and press enter"+RESET)
         else:
             print(
-                RED + "\nCommand is invalid, please try valid one. To see all commands type commands and press enter.")
+                RED + "\nCommand is invalid, please try valid one. To see all commands type commands and press enter."+RESET)
             return False
     except Exception as e:
         print(RED + "\nUnable to process command, please try again !"+RESET)
         return False
-
-
+    
 def select_all(show_logs=True):
     global selected_docs_id
     global globally_selected_docs
@@ -1441,51 +1028,17 @@ def rename_field(command):
         return False
 
 
-filter_operation = {
+def filter_document(command, text_to_replace):
+    filter_operation = {
     'edit': lambda command: edit_selected_documents(command, False),
-    'delete': lambda remove_message: delete_selected(remove_message, 'filter'),
     'add': lambda command: add_fields(command, False, 'filter'),
     'remove': lambda command: remove_field(command, False),
     'count': count,
     'append': lambda command: append_in_arr_field(command, 'filter'),
     'pop': lambda command: pop_from_arr_field(command, 'filter'),
-    'rename': lambda command: rename_field(command)
+    'rename': lambda command: rename_field(command),
+    'delete': lambda remove_message = 'do not show',type='filter':delete_selected(db,collection,selected_docs_id,remove_selection,remove_message,type)
 }
-
-
-def extract_value_from_filter(command, filter_type='eq') -> str:
-    operators = {
-        'eq': '$eq',
-        'ne': '$ne',
-        'gt': '$gt',
-        'lt': '$lt',
-        'gte': '$gte',
-        'lte': '$lte',
-        'in': '$in',
-        'nin': '$nin',
-        'regex': '$regex',
-        'or': '$or',
-        'contains': '$search',
-        'task': '$task',
-    }
-
-    operator_pattern = '|'.join(re.escape(op) for op in operators.keys())
-
-    if filter_type == 'eq':
-        pattern = r'eq\s+(.*?)\s+(?={})'.format(operator_pattern)
-    elif filter_type == 'in':
-        pattern = r'in\s+(.*?)\s+(?={})'.format(operator_pattern)
-
-    match = re.search(pattern, command)
-    if match:
-        # Extract the part between 'eq' or 'in' and the next operator
-        extracted_part = match.group(1)
-        return extracted_part.strip()
-    else:
-        return command
-
-
-def filter_document(command, text_to_replace):
     global globally_selected_docs
     global selected_docs_id
     try:
@@ -1554,9 +1107,7 @@ def filter_document(command, text_to_replace):
                                           for v in or_checking_values]
                     logical_filter_processed = []
                     for values in or_checking_values:
-                        print(values)
                         value_parts = values.split(' ')
-                        print(value_parts)
                         logical_operator = operators.get(
                             value_parts[1], value_parts[1])
                         if logical_operator == '$eq':
@@ -1827,8 +1378,6 @@ def remove_identifier():
         print(RED + "\nERROR : Invalid process of adding identifiers")
         return True
 
-
-
 def start_service():
     global boolStatus
     global mongoStatus
@@ -1866,14 +1415,12 @@ def restart_service():
         mongoStatus = 'Running'
     showStatus()
 
-
 global_commands = {
     'start mongo': start_service,
     'stop mongo': stop_service,
     'restart mongo': restart_service,
 }
 
-client = None
 
 
 def remove_current_port():
@@ -1884,14 +1431,7 @@ def remove_current_port():
     print(RED + "\nUnable to remove port, please try again!"+RESET)
     return False
 
-def connect(port):
-    global client
-    try:
-        client = pymongo.MongoClient(f"mongodb://localhost:{port}")
-        return True
-    except Exception as e:
-        print(RED + "\nUnable to connect with mongodb, try again!" + RESET)
-        return False
+
 
 
 boolStatus = check_mongo_status()
@@ -1904,16 +1444,13 @@ commands = {
     'start mongo': start_service,
     'stop mongo': stop_service,
     'restart mongo': restart_service,
-    'show dbs': showDB,
-    'show database': showDB,
-    'show databases': showDB,
+    'show dbs': lambda client=client:showDB(client),
+    'show database': lambda client=client:showDB(client),
+    'show databases': lambda client=client:showDB(client),
     'choose db': chooseDB,
     'restart': restart_executer,
-    'show collections': show_collections,
     'choose collection': choose_collection,
     'info': get_info,
-    'read all': get_collection_data,
-    'delete all': delete_documents,
     'home': navigate_home,
     'show selected': show_selected,
     'back': go_back,
@@ -1922,7 +1459,6 @@ commands = {
     'forward': go_next,
     'go next': go_next,
     'remove selection': remove_selection,
-    'delete selected': lambda remove_message = 'do not show',type='filter':delete_selected(remove_message,type),
     'select all': select_all,
     'set identifier': set_identifier,
     'set identifiers': set_identifier,
@@ -1932,24 +1468,30 @@ commands = {
     'status': showStatus
 }
 
+def document_command_processor(command): 
+    parts = command.split(' ')
+    if(db is not None and collection is not None): 
+        if len(parts) == 2 and parts[0] == 'delete' and parts[1] == 'all':
+                delete_documents(db,collection,current_collection)
+        elif len(selected_docs_id) > 0 and command == 'delete selected':
+            delete_selected(db,collection,selected_docs_id,remove_selection,'do not show','select'),
+         
 
 def main():
     global boolStatus
     global mongoStatus
+    global commands
 
     try:
         recent_port = get_recent_port()
 
         while True:
             if recent_port is not None:
-                connect(recent_port)
                 command = input(BLUE + f'\n{currentURI} ' + RESET)
-
                 if command.lower() == 'exit' or command.lower() == 'close':
                     sys.exit()
                 elif command.lower() == 'start mongo':
                     start_service()
-
                 elif command.lower() == 'stop mongo':
                     stop_service()
                 elif command.lower() == 'restart mongo':
@@ -1957,11 +1499,16 @@ def main():
                 elif command.lower() == 'restart':
                     restart_executer()
                 elif boolStatus is True:
-                    parseCommand(command.strip())
+                    if(command == 'delete all'  or command == 'delete selected'):
+                        document_command_processor(command.strip())
+                    
+                    else:
+                        parseCommand(command.strip())
                 else:
                     if command not in global_commands:
                         print(
                             RED + '\nERROR - MongoDB is not running, please run "start mongo" command to get connected with local MongoDB' + RESET)
+                
             else:
                 command = input(
                     BLUE + f'\nPort on which MongoDB is running > ' + RESET)
