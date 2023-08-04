@@ -565,8 +565,6 @@ def remove_field(command, reselect=True):
         print(f'A\nny error accured while removing field error is - {e}')
 
 
-
-
 def append_in_arr_field(command, type='selection'):
     global selected_documents_filter
     try:
