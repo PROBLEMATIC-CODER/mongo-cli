@@ -34,7 +34,9 @@ from lib.operation_helpers.type_checker import *
 from lib.document_operations.operations.deletion import *
 from lib.document_operations.operations.insertion import *
 from lib.document_operations.operations.count_docs import count
+from lib.document_operations.operations.get_value_of_selected import get_selected_value
 from lib.document_operations.operations.sort_documents import sort_documents
+from lib.document_operations.operations.identifiers import *
 from lib.collection_operations.operations.read_data import get_collection_data
 from lib.collection_operations.operations.show_collections import show_collections
 from lib.collection_operations.operations.check_exists import check_collection_exists
@@ -294,80 +296,59 @@ def remove_selection(message='show'):
               RESET) if message == 'show' else None
         return False
 
-
-def get_selected_value(command):
-    command = command.replace('value of', '')
-    values_to_get = command.split(',')
-    values_to_get = [v.strip() for v in values_to_get]
-    print(
-        GREEN + f'\nValues of field {",".join(v for v in values_to_get)} is given below - ' + RESET)
-
-    for doc in globally_selected_docs:
-        output = []
-        for value in values_to_get:
-            if value in doc:
-                output.append(f'      {value}: {doc[value]}')
-            else:
-                output.append(f'      {value}: Not Available')
-
-        if(len(values_to_get) == 1):
-            formatted_output = "\n{\n" + \
-                f"      _id: {doc['_id']},\n" + ',\n'.join(output) + "\n}"
-        else:
-            formatted_output = "\n{" + \
-                f"      \n" + ',\n'.join(output) + "\n}"
-        print(PURPLE + formatted_output + RESET)
-
-
 def select_document(command, show_logs=True, recursive=False):
     global selected_docs_id
     global selected_documents_filter
     global globally_selected_docs
-    if(db != None and collection is not None):
-        command = command.replace('select', '').strip()
-        filter_parts = command.split(' ')
-        filtered_docs_id = filter_document(command, 'select')
-        if(len(filtered_docs_id) > 0):
-            selected_docs = []
-            for doc_id in filtered_docs_id:
-                doc = collection.find({'_id': doc_id})
-                selected_docs.append(doc)
-            doc_count = 0
-            print(
-                GREEN + f"\nSuccefully selected {len(selected_docs)} {'document' if doc_count == 1 else 'documents'}. Selected documents are given below - "+RESET) if show_logs == True else None
-            selected_docs_id = []
-            globally_selected_docs = []
-            for docs in selected_docs:
-                for index, doc in enumerate(docs):
-                    doc_count += 1
-                    globally_selected_docs.append(doc)
-                    selected_docs_id.append(doc['_id'])
-                    formatted_doc = format_document(doc)
-                    print(PURPLE + f"\n{formatted_doc}" +
-                          RESET) if show_logs == True else None
-            updateURI(
-                f'{current_database}/{current_collection}/selected {len(selected_docs_id)} {f"doc" if len(selected_docs_id) ==1 else "docs"} {f"with {command}" if len(filter_parts) <=3 else None}')
-            selected_documents_filter = f'{command}'
-
-            filter_to_check = f'selected documents with {command}'
-            check_exists = linked_stages.do_stage_exists(filter_to_check,linked_stages)
-            if(check_exists == False):
-                create_stage(filter_to_check, 'document',
-                             f'{current_database}/{current_collection}', command.strip(), 'filtered document')
-            else:
-                linked_stages.move_to_existing_stage(filter_to_check,linked_stages)
-            return True
-        else:
-            print(
-                RED + f"\nNo document found to select with {command} filter" + RESET) if show_logs == True else None
-            if(recursive == True):
-                remove_selection('do not show')
+    try:
+        if(db != None and collection is not None):
+            command = command.replace('select', '').strip()
+            filter_parts = command.split(' ')
+            filtered_docs_id = filter_document(command, 'select')
+            if(len(filtered_docs_id) > 0):
+                selected_docs = []
+                for doc_id in filtered_docs_id:
+                    doc = collection.find({'_id': doc_id})
+                    selected_docs.append(doc)
+                doc_count = 0
                 print(
-                    YELLOW + f'\nSelections has been removed because no document found with filter {selected_documents_filter}, try to select with new filter' + RESET)
+                    GREEN + f"\nSuccefully selected {len(selected_docs)} {'document' if doc_count == 1 else 'documents'}. Selected documents are given below - "+RESET) if show_logs == True else None
+                selected_docs_id = []
+                globally_selected_docs = []
+                for docs in selected_docs:
+                    for index, doc in enumerate(docs):
+                        doc_count += 1
+                        globally_selected_docs.append(doc)
+                        selected_docs_id.append(doc['_id'])
+                        formatted_doc = format_document(doc)
+                        print(PURPLE + f"\n{formatted_doc}" +
+                            RESET) if show_logs == True else None
+                updateURI(
+                    f'{current_database}/{current_collection}/selected {len(selected_docs_id)} {f"doc" if len(selected_docs_id) ==1 else "docs"} {f"with {command}" if len(filter_parts) <=3 else None}')
+                selected_documents_filter = f'{command}'
+
+                filter_to_check = f'selected documents with {command}'
+                check_exists = linked_stages.do_stage_exists(filter_to_check,linked_stages)
+                if(check_exists == False):
+                    create_stage(filter_to_check, 'document',
+                                f'{current_database}/{current_collection}', command.strip(), 'filtered document')
+                else:
+                    linked_stages.move_to_existing_stage(filter_to_check,linked_stages)
+                return True
+            else:
+                print(
+                    YELLOW + f"\nNo document found to select with {command} filter" + RESET) if show_logs == True else None
+                if(recursive == True):
+                    remove_selection('do not show')
+                    print(
+                        YELLOW + f'\nSelections has been removed because no document found with filter {selected_documents_filter}, try to select with new filter' + RESET)
+                return False
+        else:
+            print(RED + "\nERROR: Process of selection is invalid" +
+                RESET) if show_logs == True else None
             return False
-    else:
-        print(RED + "\nERROR: Process of selection is invalid" +
-              RESET) if show_logs == True else None
+    except Exception :
+        print(RED + "\nUnable to select documents with the given filter, try another filter !" +RESET)
         return False
 
 
@@ -494,7 +475,7 @@ def add_fields(command, reselect=True, add_type='select'):
                         YELLOW + f"Unable to add the field in {'document with id' if not_updated_count == 1 else 'documents with ids'} {' '.join(ids for ids in ids_not_updated)}." + RESET)
 
             else:
-                print(YELLOW + "\nNothing has been selected yet to add a new field. To add a new field to the whole collection, use the command 'add to all'." + RESET)
+                print(YELLOW + "\nNothing has been selected yet to add a new field." + RESET)
                 return False
         else:
             print(RED + '\nERROR: The process of adding a new field is invalid.'+RESET)
@@ -512,7 +493,6 @@ def call_to_select_document():
     else:
         select_document(f'select {selected_documents_filter}', False, True)
     return True
-
 
 def remove_field(command, reselect=True):
     try:
@@ -563,9 +543,6 @@ def remove_field(command, reselect=True):
             return False
     except Exception as e:
         print(f'A\nny error accured while removing field error is - {e}')
-
-
-
 
 def append_in_arr_field(command, type='selection'):
     global selected_documents_filter
@@ -641,10 +618,8 @@ def append_in_arr_field(command, type='selection'):
         print(RED + "\nERROR - Any internal error accured or you may have entered invalid command"+RESET)
         return False
 
-
 def remove_all_elements(lst, element):
     return [x for x in lst if x != element]
-
 
 def pop_from_arr_field(command, type='selection'):
     command = command.replace('pop', '').strip()
@@ -761,7 +736,6 @@ def pop_from_arr_field(command, type='selection'):
             RED + f'\nInvalid format for pop command. Please provide the item and field name to remove from the array. Error: {e}\n' + RESET)
         return False
 
-
 def search_text(command):
     global selected_documents_filter
     global selected_docs_id
@@ -775,7 +749,7 @@ def search_text(command):
         search_pairs = [pairs.strip() for pairs in search_pairs]
         result = []
         collection.drop_indexes()
-        index_name = 'cli_searches'  #
+        index_name = 'cli_searches'  
         if index_name not in collection.index_information():
             collection.create_index(
                 [('cli_searches', 'text')], name=index_name, default_language='english')
@@ -833,10 +807,8 @@ def search_text(command):
     else:
         print(RED + "ERROR: Invalid process of searching text" + RESET)
 
-
-
 def parseCommand(command):
-    try:
+    # try:
         if(len(command) > 0):
             parts = command.lower().strip().split()
             if len(parts) >= 1 and parts[0] == 'run':
@@ -890,7 +862,7 @@ def parseCommand(command):
                 else:
                     insert_many(command,db,collection)
             elif (len(parts) >= 3 and parts[0] == 'value' and parts[1] == 'of'):
-                get_selected_value(command)
+                get_selected_value(command,globally_selected_docs)
             elif (len(parts) >= 2 and parts[0] == 'count'):
                 count(command,client,selected_docs_id,selected_documents_filter,db,collection,current_collection,current_database,commandNotFound)
             elif(len(parts) >= 4 and parts[0] == 'append'):
@@ -927,6 +899,7 @@ def parseCommand(command):
                 get_collection_data(collection,db,current_collection,format_document)
             elif command == 'show collections' or command == 'show collection':
                 show_collections(db,current_database)
+            
             else:
                 print(
                     RED+f"\nGiven '{command}' is invalid, please try valid one. To see all commands type commands and press enter"+RESET)
@@ -934,9 +907,9 @@ def parseCommand(command):
             print(
                 RED + "\nCommand is invalid, please try valid one. To see all commands type commands and press enter."+RESET)
             return False
-    except Exception as e:
-        print(RED + "\nUnable to process command, please try again !"+RESET)
-        return False
+    # except Exception as e:
+    #     print(RED + "\nUnable to process command, please try again !"+RESET)
+    #     return False
     
 def select_all(show_logs=True):
     global selected_docs_id
@@ -974,58 +947,68 @@ def select_all(show_logs=True):
 
 
 def rename_field(command):
-    try:
+    # try:
         if(db is not None and collection is not None):
-            command = command.replace('rename', '').strip()
-            field_pair = command.split(' and ')
-            for pair in field_pair:
-                pair_parts = pair.split(' eq ')
-                pair_parts = [parts.strip() for parts in pair_parts]
-                old_field_name, new_field_name = pair_parts[0], pair_parts[1]
-                not_found_ids = []
-                not_found_count = 0
-                found_count = 0
+            if(len(selected_docs_id) > 0):
+                command = command.replace('rename', '').strip()
+                field_pair = command.split(' and ')
+                for pair in field_pair:
+                    pair_parts = pair.split(' eq ')
+                    pair_parts = [parts.strip() for parts in pair_parts]
+                    old_field_name, new_field_name = pair_parts[0], pair_parts[1]
+                    not_found_ids = []
+                    not_found_count = 0
+                    found_count = 0
 
-                checked_ids = []
-                bulk_operations = []
-                for ids in selected_docs_id:
-                    try:
-                        update_criteria = {'_id': ids,
-                                           old_field_name: {'$exists': True}}
-                        document_field = collection.find_one(update_criteria)
-                        if document_field:
-                            update_query = UpdateOne(
-                                {'_id': ids}, {'$rename': {old_field_name: new_field_name}})
-                            bulk_operations.append(update_query)
-                            if(ids not in checked_ids):
-                                found_count += 1
-                                checked_ids.append(ids)
-                        else:
+                    checked_ids = []
+                    bulk_operations = []
+                    for ids in selected_docs_id:
+                        try:
+                            update_criteria = {'_id': ids,
+                                            old_field_name: {'$exists': True}}
+                            document_field = collection.find_one(update_criteria)
+                            if document_field:
+                                update_query = UpdateOne(
+                                    {'_id': ids}, {'$rename': {old_field_name: new_field_name}})
+                                bulk_operations.append(update_query)
+                                if(ids not in checked_ids):
+                                    found_count += 1
+                                    checked_ids.append(ids)
+                            else:
+                                if(ids not in not_found_ids):
+                                    not_found_ids.append(ids)
+                                    checked_ids.append(ids)
+                                    not_found_count += 1
+                        except Exception as e:
+                            print(e)
                             if(ids not in not_found_ids):
                                 not_found_ids.append(ids)
                                 checked_ids.append(ids)
                                 not_found_count += 1
-                    except Exception as e:
-                        if(ids not in not_found_ids):
-                            not_found_ids.append(ids)
-                            checked_ids.append(ids)
-                            not_found_count += 1
+                    if(len(bulk_operations) > 0):
+                        collection.bulk_write(bulk_operations)
+                    
+                    with_id_text = ''
 
-                if(bulk_operations):
-                    collection.bulk_write(bulk_operations)
+                    print(
+                        GREEN + f"\nSuccessfully renamed {old_field_name} to {new_field_name}" + RESET) if found_count > 0 else None
+                    if(not_found_count != len(selected_docs_id)):
+                        with_id_text = f'{"with id - " if not_found_count == 1 else "with ids - "}'
+                   
+                    print(YELLOW + f"\nUnable to rename field in {with_id_text} {'all documents' if not_found_count == len(selected_docs_id) else not_found_count} { ', '.join(str(ids) for ids in not_found_ids) if not_found_count != len(selected_docs_id) else ''}") if not_found_count > 0 else None
 
-                print(
-                    GREEN + f"\nSuccessfully renamed {old_field_name} to {new_field_name}" + RESET)
 
-                return True
-
+                    return True
+            else:
+                print(RED + "\nERROR : Invalid process of renaming field, select documents to rename field or to select all documents use 'select all' command"+RESET)
+                return False
         else:
-            print(RED + "ERROR:Invalid process of renaming field "+RESET)
+            print(RED + "\nERROR : Invalid process of renaming field "+RESET)
             return False
-    except Exception as e:
-        print(
-            RED + "ERROR: Any error accured or you may have entered invalid command."+RESET)
-        return False
+    # except Exception as e:
+    #     print(
+    #         RED + "\nERROR : Any error accured or you may have entered invalid command."+RESET)
+    #     return False
 
 
 def filter_document(command, text_to_replace):
@@ -1189,7 +1172,7 @@ def filter_document(command, text_to_replace):
             print(RED + '\nERROR : Process of filtering document is invalid')
             return False
     except Exception as e:
-        print(RED + "\nERORR : Any internal error accured or you may have entered invalid command."+RESET)
+        print(RED + "\nERORR : Any internal error accured or you may have entered invalid command."+RESET) if text_to_replace != 'select' else None
         return False
 
 
@@ -1310,73 +1293,7 @@ def go_next():
         return False
 
 
-def set_identifier():
-    if(db is not None and collection is not None):
-        if(len(selected_docs_id) == 0 and len(globally_selected_docs) == 0):
-            all_documents = list(collection.find())
-            if not all_documents:
-                print(YELLOW + "\nNo document in collection !" + RESET)
-                return False
-            identifier_count = 1
-            for doc in all_documents:
-                if 'identifier' not in doc:
-                    doc['identifier'] = identifier_count
-                    identifier_count += 1
-            collection.bulk_write(
-                [pymongo.ReplaceOne({"_id": doc["_id"]}, doc) for doc in all_documents])
-            print(GREEN + "\nSuccessfully added identifiers to all documents"+RESET)
-            return True
-        else:
-            identifier_count = 1
-            last_identifier_value = None
-            for doc in globally_selected_docs:
-                if 'identifier' not in doc:
-                    if(last_identifier_value is not None):
-                        doc['identifier'] = last_identifier_value
-                    else:
-                        doc['identifier'] = identifier_count
-                else:
-                    last_identifier_value = doc['identifer']
-            collection.bulk_write(
-                [pymongo.ReplaceOne({"_id": doc["_id"]}, doc) for doc in globally_selected_docs])
-            print(
-                GREEN + "\nSuccessfully added identifiers to all selected dcouments" + RESET)
-            return True
-    else:
-        print(RED + "ERROR : Invalid process of adding identifiers")
-        return True
-
-
-def remove_identifier():
-    if(db is not None and collection is not None):
-        if(len(selected_docs_id) == 0 and len(globally_selected_docs) == 0):
-            all_documents = list(collection.find())
-
-            if not all_documents:
-                print(YELLOW + "\nCollection is empty !"+RESET)
-                return False
-
-            for doc in all_documents:
-                if 'identifier' in doc:
-                    doc.pop('identifier', None)
-
-            collection.bulk_write(
-                [pymongo.ReplaceOne({"_id": doc["_id"]}, doc) for doc in all_documents])
-            print(GREEN + "\nSuccessfully removed identifiers to all documents"+RESET)
-            return True
-        else:
-
-            for doc in globally_selected_docs:
-                if 'identifier' in doc:
-                    doc.pop('identifier', None)
-            collection.bulk_write(
-                [pymongo.ReplaceOne({"_id": doc["_id"]}, doc) for doc in globally_selected_docs])
-            print(
-                GREEN + "\nSuccessfully removed identifiers to all selected dcouments" + RESET)
-            return True
-    else:
-        print(RED + "\nERROR : Invalid process of adding identifiers")
-        return True
+ 
 
 def start_service():
     global boolStatus
@@ -1460,22 +1377,24 @@ commands = {
     'go next': go_next,
     'remove selection': remove_selection,
     'select all': select_all,
-    'set identifier': set_identifier,
-    'set identifiers': set_identifier,
-    'remove identifier': remove_identifier,
-    'remove identifiers': remove_identifier,
     'remove port':remove_current_port,
     'status': showStatus
 }
 
-def document_command_processor(command): 
+args_processed_commands = ['delete all','delete selected','set identifier','unset identifier']
+
+def args_processed_command(command): 
     parts = command.split(' ')
     if(db is not None and collection is not None): 
         if len(parts) == 2 and parts[0] == 'delete' and parts[1] == 'all':
                 delete_documents(db,collection,current_collection)
         elif len(selected_docs_id) > 0 and command == 'delete selected':
             delete_selected(db,collection,selected_docs_id,remove_selection,'do not show','select'),
-         
+        elif command == 'set identifier' or command == 'set identifiers': 
+                set_identifier(db,collection,globally_selected_docs,selected_docs_id)
+            
+        elif command == 'unset identifier' or command == 'unset identifiers':
+            remove_identifier(db,collection,globally_selected_docs,selected_docs_id)
 
 def main():
     global boolStatus
@@ -1499,11 +1418,11 @@ def main():
                 elif command.lower() == 'restart':
                     restart_executer()
                 elif boolStatus is True:
-                    if(command == 'delete all'  or command == 'delete selected'):
-                        document_command_processor(command.strip())
-                    
+                    if command in args_processed_commands:
+                        args_processed_command(command.strip())   
                     else:
                         parseCommand(command.strip())
+
                 else:
                     if command not in global_commands:
                         print(

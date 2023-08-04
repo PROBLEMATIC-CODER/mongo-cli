@@ -21,12 +21,12 @@ def check_mongo_status():
     host = "localhost"
     port = None
 
-    with open('config.yaml', 'r') as f:
-        data = yaml.safe_load(f)
-    if(data is not None):
-        port = data['recent_port']
 
     try:
+        with open('config.yaml', 'r') as f:
+            data = yaml.safe_load(f)
+        if(data is not None):
+            port = data['recent_port']
         if(port is not None):
             with socket.create_connection((host, port), timeout=5):
                 return True
@@ -35,4 +35,4 @@ def check_mongo_status():
 
     except Exception as e:
         create_config_yaml()
-        return True
+        return False
