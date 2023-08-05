@@ -1435,12 +1435,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-# --------------------------------------------------BUGS--------------------------------------------------------------
-# BUG  - can't filter when filter command contains in and or both
-# * BUG - 1. Selection gets removed when we add new field when the selection is on the basis of search
-# * BUG - 2. Can't select document when filter contains array
-# * BUG - Filter can't give accurate results when filter contains arr
-# * BUG - Can't add more then two item of object using append command
-# * BUG - TypeError: Object of type datetime is not JSON serializable
