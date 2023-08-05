@@ -26,33 +26,36 @@ def delete_documents(db,collection,current_collection):
         print(RED+"\nInvalid process to deleting all document"+RESET)
 
 def conditional_delete(command,collection,db,current_collection):
-    command = command.replace('delete with', '').strip()
-    command_parts = command.split('eq')
-    command_parts = [v.strip() for v in command_parts]
-    key, value = command_parts[0], command_parts[1]
-    if(collection != None and db != None):
-        try:
-            value = process_value(value)
-            processed_deletion_filter = {key: value}
-            deletion = collection.delete_many(processed_deletion_filter)
-            if(deletion.deleted_count > 0):
-                print(
-                    GREEN + f"\nSuccessfully Deleted {deletion.deleted_count} documents" + RESET)
-                return True
-            else:
-                print(
-                    YELLOW + f"\nNo such document exists with {command} in {current_collection}" + RESET)
+    try:
+        command = command.replace('delete with', '').strip()
+        command_parts = command.split('eq')
+        command_parts = [v.strip() for v in command_parts]
+        key, value = command_parts[0], command_parts[1]
+        if(collection != None and db != None):
+            try:
+                value = process_value(value)
+                processed_deletion_filter = {key: value}
+                deletion = collection.delete_many(processed_deletion_filter)
+                if(deletion.deleted_count > 0):
+                    print(
+                        GREEN + f"\nSuccessfully Deleted {deletion.deleted_count} documents" + RESET)
+                    return True
+                else:
+                    print(
+                        YELLOW + f"\nNo such document exists with {command} in {current_collection}" + RESET)
 
+                    return False
+            except Exception as e:
+                print(e)
+                print(
+                    RED + f"\nERROR : Any error accured while deleting the documents, error is - {e}"+RESET)
                 return False
-        except Exception as e:
-            print(e)
-            print(
-                RED + f"\nERROR : Any error accured while deleting the documents, error is - {e}"+RESET)
+        else:
+            print(RED + f"\nERROR - Invalid process of document deletion" + RESET)
             return False
-    else:
-        print(RED + f"\nERROR - Invalid process of document deletion" + RESET)
+    except Exception as e:
+        print(RED + "\nAny error accured while deleting document"+RESET)
         return False
-
 def delete_selected(db,collection,selected_docs_id,remove_selection,remove_message='show', type='select'):
     if(db != None and collection != None):
         if(len(selected_docs_id) > 0):

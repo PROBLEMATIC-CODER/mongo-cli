@@ -67,12 +67,13 @@ def process_direct_insertion_data(data):
         return False
 
 def process_insertion_many_data(data):
+    print(data)
     processed_data = {}
-    pairs = data.split(',')
-    pairs = [pair.strip() for pair in pairs]
+    pairs = re.findall(
+            r"\w+\s+eq\s+(?:\[[^\]]+\]|[^,]+)", data)
     for pair in pairs:
         pair_parts = pair.split(' eq ')
-        key, value = pair_parts[0], pair_parts[1]
+        key, value = pair_parts[0].strip(), pair_parts[1].strip()
         value = process_value(value)
         processed_data[key] = value
     return processed_data

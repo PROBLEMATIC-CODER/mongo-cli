@@ -87,7 +87,6 @@ def showStatus():
     else:
         print(RED+f'\nCurrent MongoDB Status : {mongoStatus} \n'+RESET)
 
-
 def commandNotFound(command):
     print(RED+f'\nERROR:No such command found with name {command}'+RESET)
     return True
@@ -163,7 +162,6 @@ def enterInDatabase(database, type):
     except Exception as e:
         return False
 
-
 def enterInCollection(collection_name, type):
     global collection
     global current_collection
@@ -198,7 +196,6 @@ def enterInCollection(collection_name, type):
                     RED+f"\n No collection found with name {collection_name}")
                 return False
 
-
 def choose_collection():
     global current_collection
     if(db != None):
@@ -223,7 +220,6 @@ def choose_collection():
     else:
         print(RED+f"\nNo Databases are choosen has choosen yet, choose a database to see collections or see directly"+RESET)
         return False
-
 
 def drop(name):
     if(db is None):
@@ -258,7 +254,7 @@ def get_direct_access(db_name, collection_name, show_logs=True):
             updateURI(f'{db_exists["name"]}/{collection_name}')
             print(
                 GREEN + f' \nSuccefully accessed {collection_name} of {db_name}' + RESET) if show_logs is True else None
-            do_stage_exists = linked_stages.do_stage_exists( 
+            do_stage_exists = linked_stages.do_stage_exists(
                 current_collection.strip(),linked_stages)
             if(do_stage_exists == False):
                 create_stage(collection_name.strip(), 'collection',
@@ -275,7 +271,6 @@ def get_direct_access(db_name, collection_name, show_logs=True):
         print(
             RED + f"\nERROR: No such database exists with name {db_name}" + RESET) if show_logs is True else None
         return False
-
 
 def remove_selection(message='show'):
     global selected_docs_id
@@ -350,7 +345,6 @@ def select_document(command, show_logs=True, recursive=False):
         print(RED + "\nUnable to select documents with the given filter, try another filter !" +RESET)
         return False
 
-
 def navigate_home(show='show'):
     global db
     global is_home_stage_created
@@ -364,7 +358,6 @@ def navigate_home(show='show'):
     print(GREEN+'\nWelcome back home !' +
           RESET) if show != 'do not show' else None
     updateURI('')
-
 
 def show_selected():
     global selected_docs_id
@@ -380,7 +373,6 @@ def show_selected():
     else:
         print(YELLOW + "\nNothing has been selected yet" + RESET)
         return False
-
 
 def edit_selected_documents(command, reselect=True):
     if collection is not None and db is not None:
@@ -431,7 +423,6 @@ def edit_selected_documents(command, reselect=True):
                 GREEN + f"\n{updated_count if id_len != updated_count else 'All'} documents have been updated successfully" + RESET) if updated_count > 0 else None
             print(
                 YELLOW + f"\nUnable to edit {'document with id' if len(not_updated_ids) == 0 else 'documents with ids - '} {(',').join(str(id) for id in not_updated_ids)}"+RESET) if not_updated_count > 0 else None
-
 
 def add_fields(command, reselect=True, add_type='select'):
     try:
@@ -484,7 +475,6 @@ def add_fields(command, reselect=True, add_type='select'):
             RED + f'\nERROR: Unable to add field to {"selected documents" if add_type == "select" else "filtered documents"}')
 
         return False
-
 
 def call_to_select_document():
     if selected_documents_filter == 'select all':
@@ -807,7 +797,7 @@ def search_text(command):
         print(RED + "ERROR: Invalid process of searching text" + RESET)
 
 def parseCommand(command):
-    # try:
+    try:
         if(len(command) > 0):
             parts = command.lower().strip().split()
             if len(parts) >= 1 and parts[0] == 'run':
@@ -904,11 +894,11 @@ def parseCommand(command):
                     RED+f"\nGiven '{command}' is invalid, please try valid one. To see all commands type commands and press enter"+RESET)
         else:
             print(
-                RED + "\nCommand is invalid, please try valid one. To see all commands type commands and press enter."+RESET)
+                RED + "\nCommand is invalid, please try valid one. To see all commands use 'show commands' command"+RESET)
             return False
-    # except Exception as e:
-    #     print(RED + "\nUnable to process command, please try again !"+RESET)
-    #     return False
+    except Exception as e:
+        print(RED + "\nUnable to process command, please try again !"+RESET)
+        return False
     
 def select_all(show_logs=True):
     global selected_docs_id
@@ -943,7 +933,6 @@ def select_all(show_logs=True):
     else:
         print(RED + "\nERROR : Invalid process of selecting all documents"+RESET)
         return False
-
 
 def rename_field(command):
     # try:
@@ -1008,7 +997,6 @@ def rename_field(command):
     #     print(
     #         RED + "\nERROR : Any error accured or you may have entered invalid command."+RESET)
     #     return False
-
 
 def filter_document(command, text_to_replace):
     filter_operation = {
@@ -1174,7 +1162,6 @@ def filter_document(command, text_to_replace):
         print(RED + "\nERORR : Any internal error accured or you may have entered invalid command."+RESET) if text_to_replace != 'select' else None
         return False
 
-
 def go_back():
     global current_collection, current_database
     global collection, db
@@ -1234,7 +1221,6 @@ def go_back():
         print(GREEN + '\nStage Updated' + RESET)
 
     return True
-
 
 def go_next():
     current_stage = linked_stages.current_stage
@@ -1307,7 +1293,6 @@ def start_service():
     else:
         print(YELLOW + '\nMongoDB is already up and running' + RESET)
 
-
 def stop_service():
     global boolStatus
     global mongoStatus
@@ -1320,7 +1305,6 @@ def stop_service():
         showStatus()
     else:
         print(YELLOW + '\nMongoDB is already stopped' + RESET)
-
 
 def restart_service():
     global boolStatus
@@ -1363,7 +1347,7 @@ commands = {
     'choose db': chooseDB,
     'restart': restart_executer,
     'choose collection': choose_collection,
-    'info': get_info,
+    'get info': get_info,
     'home': navigate_home,
     'show selected': show_selected,
     'back': go_back,

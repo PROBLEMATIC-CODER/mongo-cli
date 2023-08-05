@@ -45,6 +45,7 @@ def insert_many(command,db,collection):
             return True
 
         except Exception as e:
+            print(e)
             print(RED + "\nUnable to insert many documents due to some error"+RESET)
             return False
 
