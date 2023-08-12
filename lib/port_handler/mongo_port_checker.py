@@ -10,7 +10,6 @@ def check_mongo_running(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(1)
             connection = s.connect(('localhost', port))
-            print(connection)
         return True
     except Exception: 
         return False    
