@@ -1372,10 +1372,10 @@ def args_processed_command(command):
             delete_selected(db,collection,selected_docs_id,remove_selection,'do not show','select'),
         elif command == 'set identifier' or command == 'set identifiers': 
                 set_identifier(db,collection,globally_selected_docs,selected_docs_id)
-            
         elif command == 'unset identifier' or command == 'unset identifiers':
             remove_identifier(db,collection,globally_selected_docs,selected_docs_id)
-        elif command == 'showdbs' or command == 'show databases':
+    elif client is not None:
+        if command == 'show dbs' or command == 'show databases':
             showDB(client)
 
 def main():
@@ -1402,6 +1402,7 @@ def main():
                     restart_executer()
                 elif boolStatus is True:
                     if command in args_processed_commands:
+                        
                         args_processed_command(command.strip())   
                     else:
                         parseCommand(command.strip())
